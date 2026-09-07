@@ -122,3 +122,44 @@ export interface AutostereogramOptions extends SirdsOptions {
   pattern?: RgbaImage;
 }
 
+/**
+ * Procedural geometric 3D primitives supported by the depth engine.
+ */
+export type DepthPrimitive =
+  | 'sphere'
+  | 'torus'
+  | 'cone'
+  | 'cylinder'
+  | 'pyramid'
+  | 'heart'
+  | 'slanted'
+  | 'box';
+
+/**
+ * Options for text rasterization into depth maps.
+ */
+export interface TextRasterOptions {
+  /** Font size in pixels. Default: Math.round(height * 0.35). */
+  fontSize?: number;
+  /** Font weight (e.g. 'normal', 'bold', '900'). Default: 'bold'. */
+  fontWeight?: string | number;
+  /** Font family. Default: 'sans-serif'. */
+  fontFamily?: string;
+  /** Maximum elevation for text surface in [0.0, 1.0]. Default: 1.0. */
+  peakDepth?: number;
+  /** Background plane elevation in [0.0, 1.0]. Default: 0.0. */
+  backgroundDepth?: number;
+}
+
+/**
+ * Options for SVG path rasterization into depth maps.
+ */
+export interface SvgRasterOptions {
+  /** Maximum elevation for shape surface in [0.0, 1.0]. Default: 1.0. */
+  peakDepth?: number;
+  /** Background plane elevation in [0.0, 1.0]. Default: 0.0. */
+  backgroundDepth?: number;
+  /** Fill rule: 'nonzero' | 'evenodd'. Default: 'nonzero'. */
+  fillRule?: 'nonzero' | 'evenodd';
+}
+
