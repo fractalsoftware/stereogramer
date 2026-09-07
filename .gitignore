@@ -1,0 +1,11 @@
+node_modules
+dist
+.worktrees
+.DS_Store
+*.log
+coverage
+.wireit
+.turbo
+scratch
+test-results
+*.tsbuildinfo

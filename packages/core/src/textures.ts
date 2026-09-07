@@ -1,0 +1,208 @@
+import type {
+  PerlinTextureOptions,
+  RgbaColor,
+  RgbaImage,
+  VoronoiTextureOptions,
+} from './types.js';
+
+/**
+ * Hash function returning a pseudo-random 2D unit gradient vector [gx, gy].
+ */
+function grad2D(ix: number, iy: number, seed: number = 42): [number, number] {
+  let h = (ix * 374761393 + iy * 668265263 + seed * 966826527) ^ 0x5bf03635;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  const angle = ((h >>> 0) / 4294967296) * Math.PI * 2;
+  return [Math.cos(angle), Math.sin(angle)];
+}
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Computes single-octave periodic (seamlessly tileable) 2D gradient noise in [0, 1].
+ */
+function periodicNoise2D(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  periodX: number,
+  periodY: number,
+  seed: number
+): number {
+  const u = (x / width) * periodX;
+  const v = (y / height) * periodY;
+
+  const i0 = Math.floor(u);
+  const j0 = Math.floor(v);
+  const i1 = (i0 + 1) % periodX;
+  const j1 = (j0 + 1) % periodY;
+  const i0w = (i0 % periodX + periodX) % periodX;
+  const j0w = (j0 % periodY + periodY) % periodY;
+
+  const fu = u - i0;
+  const fv = v - j0;
+
+  const su = smoothstep(fu);
+  const sv = smoothstep(fv);
+
+  const [g00x, g00y] = grad2D(i0w, j0w, seed);
+  const [g10x, g10y] = grad2D(i1, j0w, seed);
+  const [g01x, g01y] = grad2D(i0w, j1, seed);
+  const [g11x, g11y] = grad2D(i1, j1, seed);
+
+  const n00 = g00x * fu + g00y * fv;
+  const n10 = g10x * (fu - 1) + g10y * fv;
+  const n01 = g01x * fu + g01y * (fv - 1);
+  const n11 = g11x * (fu - 1) + g11y * (fv - 1);
+
+  const nx0 = n00 * (1 - su) + n10 * su;
+  const nx1 = n01 * (1 - su) + n11 * su;
+  const n = nx0 * (1 - sv) + nx1 * sv;
+
+  return Math.max(0, Math.min(1, n * 0.7071 + 0.5));
+}
+
+/**
+ * Generates a seamlessly tileable procedural Perlin noise texture.
+ */
+export function generatePerlinTexture(
+  width: number,
+  height: number,
+  options: PerlinTextureOptions = {}
+): RgbaImage {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const octaves = Math.max(1, options.octaves ?? 3);
+  const baseScale = Math.max(2, Math.round(options.scale ?? 4));
+  const colorA: RgbaColor = options.colorA ?? [56, 189, 248, 255]; // cyan
+  const colorB: RgbaColor = options.colorB ?? [15, 23, 42, 255];   // dark slate
+
+  const data = new Uint8ClampedArray(w * h * 4);
+
+  for (let y = 0; y < h; y++) {
+    const rowOffset = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      let nSum = 0;
+      let ampSum = 0;
+      let amp = 1.0;
+      let freq = baseScale;
+
+      for (let oct = 0; oct < octaves; oct++) {
+        nSum += periodicNoise2D(x, y, w, h, freq, freq, 100 + oct * 57) * amp;
+        ampSum += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+
+      const t = nSum / ampSum;
+      const offset = rowOffset + x * 4;
+
+      data[offset] = Math.round(colorB[0] * (1 - t) + colorA[0] * t);
+      data[offset + 1] = Math.round(colorB[1] * (1 - t) + colorA[1] * t);
+      data[offset + 2] = Math.round(colorB[2] * (1 - t) + colorA[2] * t);
+      data[offset + 3] = 255;
+    }
+  }
+
+  return { width: w, height: h, data };
+}
+
+/**
+ * Generates a seamlessly tileable procedural Voronoi cellular texture.
+ */
+export function generateVoronoiTexture(
+  width: number,
+  height: number,
+  options: VoronoiTextureOptions = {}
+): RgbaImage {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const numCells = Math.max(4, options.numCells ?? 16);
+  const colorA: RgbaColor = options.colorA ?? [236, 72, 153, 255]; // pink
+  const colorB: RgbaColor = options.colorB ?? [30, 41, 59, 255];   // slate border
+
+  // Seed cell centers deterministically
+  const cellX = new Float32Array(numCells);
+  const cellY = new Float32Array(numCells);
+  for (let i = 0; i < numCells; i++) {
+    // Halton sequence or deterministic LCG
+    const seed = (i * 1664525 + 1013904223) % 4294967296;
+    const seed2 = (seed * 1664525 + 1013904223) % 4294967296;
+    cellX[i] = (seed / 4294967296) * w;
+    cellY[i] = (seed2 / 4294967296) * h;
+  }
+
+  const data = new Uint8ClampedArray(w * h * 4);
+
+  for (let y = 0; y < h; y++) {
+    const rowOffset = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      let d1 = Infinity;
+      let d2 = Infinity;
+
+      for (let i = 0; i < numCells; i++) {
+        // Toroidal periodic distance metric
+        const rawDx = Math.abs(x - cellX[i]!);
+        const dx = Math.min(rawDx, w - rawDx);
+        const rawDy = Math.abs(y - cellY[i]!);
+        const dy = Math.min(rawDy, h - rawDy);
+        const d = Math.sqrt(dx * dx + dy * dy);
+
+        if (d < d1) {
+          d2 = d1;
+          d1 = d;
+        } else if (d < d2) {
+          d2 = d;
+        }
+      }
+
+      // Border proximity: (d2 - d1)
+      const edge = Math.min(1.0, (d2 - d1) / (Math.min(w, h) * 0.12));
+      const t = edge;
+      const offset = rowOffset + x * 4;
+
+      data[offset] = Math.round(colorB[0] * (1 - t) + colorA[0] * t);
+      data[offset + 1] = Math.round(colorB[1] * (1 - t) + colorA[1] * t);
+      data[offset + 2] = Math.round(colorB[2] * (1 - t) + colorA[2] * t);
+      data[offset + 3] = 255;
+    }
+  }
+
+  return { width: w, height: h, data };
+}
+
+/**
+ * Generates a procedural checkerboard texture tile.
+ */
+export function generateCheckerboardTexture(
+  width: number,
+  height: number,
+  cellSize: number = 10,
+  colorA: RgbaColor = [56, 189, 248, 255],
+  colorB: RgbaColor = [30, 41, 59, 255]
+): RgbaImage {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const cell = Math.max(1, Math.round(cellSize));
+  const data = new Uint8ClampedArray(w * h * 4);
+
+  for (let y = 0; y < h; y++) {
+    const cy = Math.floor(y / cell);
+    const rowOffset = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      const cx = Math.floor(x / cell);
+      const isA = (cx + cy) % 2 === 0;
+      const color = isA ? colorA : colorB;
+      const offset = rowOffset + x * 4;
+
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = color[3];
+    }
+  }
+
+  return { width: w, height: h, data };
+}
