@@ -71,3 +71,38 @@ export interface SirdsOptions {
    */
   random?: () => number;
 }
+
+/**
+ * Configuration options for generating a Textured Single Image Stereogram (Textured SIS).
+ */
+export interface TexturedStereogramOptions {
+  /**
+   * Ocular convergence alignment mode.
+   * Default: 'parallel'.
+   */
+  convergenceMode?: ConvergenceMode;
+
+  /**
+   * Base horizontal pattern separation in pixels at the background plane (depth = 0).
+   * Default: ~1/7 to 1/8 of stereogram width (Math.round(width / 8)).
+   */
+  patternSeparation?: number;
+
+  /**
+   * Depth intensity factor in [0.0, 1.0], modulating horizontal disparity.
+   * Default: 1.0.
+   */
+  depthFactor?: number;
+}
+
+/**
+ * Unified configuration options for generating an autostereogram (SIRDS or Textured SIS).
+ */
+export interface AutostereogramOptions extends SirdsOptions {
+  /**
+   * Optional pattern image buffer for generating a Textured Single Image Stereogram (SIS).
+   * When omitted, a Single Image Random Dot Stereogram (SIRDS) is generated.
+   */
+  pattern?: RgbaImage;
+}
+

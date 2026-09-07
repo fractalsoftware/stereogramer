@@ -47,3 +47,16 @@ export function calculateSeparation(
   const minSeparation = Math.floor(S * (1.0 - MAX_DISPARITY_FRACTION * f));
   return Math.max(minSeparation, Math.min(S, sep));
 }
+
+/**
+ * Calculates the default base pattern separation for a given stereogram width.
+ * Standard autostereograms use roughly 1/7 to 1/8 of the image width
+ * (typically Math.round(width / 8), providing comfortable binocular fusibility).
+ *
+ * @param width Image width in pixels.
+ * @returns Default pattern separation in pixels.
+ */
+export function getDefaultPatternSeparation(width: number): number {
+  return Math.max(1, Math.round(width / 8));
+}
+

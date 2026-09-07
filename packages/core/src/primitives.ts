@@ -1,4 +1,4 @@
-import type { DepthMap } from './types.js';
+import type { DepthMap, RgbaColor, RgbaImage } from './types.js';
 
 /**
  * Creates a DepthMap with dimensions width x height initialized to defaultValue.
@@ -119,3 +119,45 @@ export function createSlantedPlaneDepthMap(
 
   return map;
 }
+
+/**
+ * Creates an RGBA checkerboard test pattern image.
+ *
+ * @param width Pattern width in pixels.
+ * @param height Pattern height in pixels.
+ * @param cellSize Grid cell dimension in pixels (default 8).
+ * @param colorA First cell color (default white).
+ * @param colorB Second cell color (default dark slate).
+ * @returns RgbaImage pattern buffer.
+ */
+export function createCheckerboardPattern(
+  width: number,
+  height: number,
+  cellSize: number = 8,
+  colorA: RgbaColor = [255, 255, 255, 255],
+  colorB: RgbaColor = [30, 41, 59, 255]
+): RgbaImage {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const cell = Math.max(1, Math.round(cellSize));
+  const data = new Uint8ClampedArray(w * h * 4);
+
+  for (let y = 0; y < h; y++) {
+    const cellY = Math.floor(y / cell);
+    const rowOffset = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      const cellX = Math.floor(x / cell);
+      const isA = (cellX + cellY) % 2 === 0;
+      const color = isA ? colorA : colorB;
+      const offset = rowOffset + x * 4;
+
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = color[3];
+    }
+  }
+
+  return { width: w, height: h, data };
+}
+
