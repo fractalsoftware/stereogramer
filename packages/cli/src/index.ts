@@ -5,12 +5,13 @@ import fs from 'node:fs';
 import {
   generateSirds,
   generateTexturedStereogram,
-  createSphereDepthMap,
-  createBoxDepthMap,
-  createSlantedPlaneDepthMap,
+  createPrimitiveDepthMap,
+  applyGaussianBlur,
+  applyBevel,
   type DepthMap,
   type RgbaImage,
   type ConvergenceMode,
+  type DepthPrimitive,
 } from '@stereogramer/core';
 
 async function main() {
@@ -23,6 +24,12 @@ async function main() {
     .option('--sirds', 'Generate a Single Image Random Dot Stereogram (SIRDS)')
     .option('-p, --pattern <path>', 'Input pattern texture image path for Textured SIS')
     .option('-d, --depth <path>', 'Input grayscale depth map image path')
+    .option('-t, --text <text>', 'Text string to extrude as 3D depth relief')
+    .option('--primitive <name>', 'Procedural 3D primitive: sphere, torus, cone, cylinder, pyramid, heart, slanted, box')
+    .option('--shape <shape>', 'Alias for --primitive')
+    .option('--font-size <points>', 'Font size for extruded text in pixels')
+    .option('--bevel <pixels>', 'Continuous bevel extrusion edge width in pixels', '0')
+    .option('--blur <pixels>', 'Separable Gaussian blur filter radius in pixels', '0')
     .option('-o, --output <path>', 'Output file path')
     .option('-w, --width <pixels>', 'Image width in pixels')
     .option('-h, --height <pixels>', 'Image height in pixels')
@@ -32,7 +39,6 @@ async function main() {
     .option('--no-hsr', 'Disable Hidden Surface Removal (HSR)')
     .option('-m, --mode <mode>', 'Convergence mode: parallel or cross', 'parallel')
     .option('--dot-scale <scale>', 'Pixel block dimension of dots (SIRDS only)', '1')
-    .option('--shape <shape>', 'Procedural depth shape (sphere, box, slanted)', 'sphere')
     .action(async (opts) => {
       try {
         const rawFactor = opts.factor ?? opts.depthFactor;
@@ -71,24 +77,83 @@ async function main() {
             .raw()
             .toBuffer({ resolveWithObject: true });
 
-          const floatData = new Float32Array(info.width * info.height);
+          const floatData = new Float32Array(data.length);
+          for (let i = 0; i < data.length; i++) {
+            floatData[i] = data[i]! / 255.0;
+          }
+
+          depthMap = { width: info.width, height: info.height, data: floatData };
+        } else if (opts.text) {
+          // Extrude text string into depth map
+          const width = Math.max(1, parseInt(opts.width, 10) || 800);
+          const height = Math.max(1, parseInt(opts.height, 10) || 600);
+          const fontSize = opts.fontSize ? parseInt(opts.fontSize, 10) : Math.round(height * 0.35);
+
+          const escapedText = opts.text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+          const svgText = `
+            <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+              <rect width="100%" height="100%" fill="black" />
+              <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
+                    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+                    font-size="${fontSize}" font-weight="bold" fill="white">
+                ${escapedText}
+              </text>
+            </svg>
+          `;
+
+          const { data, info } = await sharp(Buffer.from(svgText))
+            .resize(width, height)
+            .grayscale()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+          const floatData = new Float32Array(data.length);
           for (let i = 0; i < data.length; i++) {
             floatData[i] = data[i]! / 255.0;
           }
 
           depthMap = { width: info.width, height: info.height, data: floatData };
         } else {
-          // Generate procedural depth map
+          // Generate procedural depth primitive
           const width = Math.max(1, parseInt(opts.width, 10) || 800);
           const height = Math.max(1, parseInt(opts.height, 10) || 600);
-          const shape = (opts.shape || 'sphere').toLowerCase();
-          if (shape === 'box') {
-            depthMap = createBoxDepthMap(width, height);
-          } else if (shape === 'slanted') {
-            depthMap = createSlantedPlaneDepthMap(width, height);
-          } else {
-            depthMap = createSphereDepthMap(width, height);
+          const primitiveName = (opts.primitive || opts.shape || 'sphere').toLowerCase();
+          const validPrimitives: DepthPrimitive[] = [
+            'sphere',
+            'torus',
+            'cone',
+            'cylinder',
+            'pyramid',
+            'heart',
+            'slanted',
+            'box',
+          ];
+
+          if (!validPrimitives.includes(primitiveName as DepthPrimitive)) {
+            console.error(
+              `Error: Invalid primitive "${primitiveName}". Valid options: ${validPrimitives.join(', ')}`
+            );
+            process.exit(1);
           }
+
+          depthMap = createPrimitiveDepthMap(primitiveName as DepthPrimitive, width, height);
+        }
+
+        // Apply bevel extrusion if requested
+        const bevelWidth = parseFloat(opts.bevel || '0');
+        if (bevelWidth > 0) {
+          depthMap = applyBevel(depthMap, bevelWidth);
+        }
+
+        // Apply separable Gaussian blur if requested
+        const blurRadius = parseFloat(opts.blur || '0');
+        if (blurRadius > 0) {
+          depthMap = applyGaussianBlur(depthMap, blurRadius);
         }
 
         // Ensure parent directory exists
@@ -132,7 +197,7 @@ async function main() {
             hsr,
           });
 
-          await sharp(result.data, {
+          await sharp(Buffer.from(result.data.buffer), {
             raw: {
               width: result.width,
               height: result.height,
@@ -142,9 +207,7 @@ async function main() {
             .png()
             .toFile(outputPath);
 
-          console.log(
-            `Successfully generated Textured SIS: ${outputPath} (${result.width}x${result.height})`
-          );
+          console.log(`Successfully generated Textured SIS: ${outputPath} (${result.width}x${result.height})`);
         } else {
           // SIRDS Mode
           const effectiveSeparation = separation ?? Math.round(depthMap.width / 8);
@@ -152,28 +215,28 @@ async function main() {
             `Rendering SIRDS (${depthMap.width}x${depthMap.height}, mode: ${mode}, separation: ${effectiveSeparation}px, hsr: ${hsr})...`
           );
 
-          const sirds = generateSirds(depthMap, {
+          const result = generateSirds(depthMap, {
             convergenceMode: mode,
             patternSeparation: separation,
             depthFactor,
-            dotScale,
             hsr,
+            dotScale,
           });
 
-          await sharp(sirds.data, {
+          await sharp(Buffer.from(result.data.buffer), {
             raw: {
-              width: sirds.width,
-              height: sirds.height,
+              width: result.width,
+              height: result.height,
               channels: 4,
             },
           })
             .png()
             .toFile(outputPath);
 
-          console.log(`Successfully generated SIRDS: ${outputPath} (${sirds.width}x${sirds.height})`);
+          console.log(`Successfully generated SIRDS: ${outputPath} (${result.width}x${result.height})`);
         }
       } catch (err) {
-        console.error('Error generating stereogram:', err);
+        console.error('Stereogram generation failed:', err);
         process.exit(1);
       }
     });
@@ -181,7 +244,4 @@ async function main() {
   await program.parseAsync(process.argv);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main();

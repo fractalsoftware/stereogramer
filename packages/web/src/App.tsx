@@ -2,18 +2,20 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   generateSirds,
   generateTexturedStereogram,
-  createSphereDepthMap,
-  createBoxDepthMap,
-  createSlantedPlaneDepthMap,
+  createPrimitiveDepthMap,
+  applyGaussianBlur,
+  applyBevel,
+  rasterizeText,
   createCheckerboardPattern,
   getDefaultPatternSeparation,
   type DepthMap,
   type RgbaImage,
   type ConvergenceMode,
+  type DepthPrimitive,
 } from '@stereogramer/core';
 
 type GeneratorMode = 'sirds' | 'textured';
-type DepthShape = 'sphere' | 'box' | 'slanted';
+type DepthSource = 'primitive' | 'text' | 'upload';
 
 interface UploadedImage {
   width: number;
@@ -25,7 +27,14 @@ interface UploadedImage {
 
 export const App: React.FC = () => {
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('textured');
-  const [shape, setShape] = useState<DepthShape>('sphere');
+  const [depthSource, setDepthSource] = useState<DepthSource>('primitive');
+  const [primitive, setPrimitive] = useState<DepthPrimitive>('sphere');
+  const [extrudedText, setExtrudedText] = useState<string>('3D MAGIC');
+  const [textFontSize, setTextFontSize] = useState<number>(72);
+  const [bevel, setBevel] = useState<number>(0);
+  const [blur, setBlur] = useState<number>(0);
+  const [invertDepth, setInvertDepth] = useState<boolean>(false);
+
   const [customDepth, setCustomDepth] = useState<UploadedImage | null>(null);
   const [customPattern, setCustomPattern] = useState<UploadedImage | null>(null);
   const [patternPreset, setPatternPreset] = useState<'geometric' | 'mosaic' | 'stripes'>('geometric');
@@ -59,13 +68,13 @@ export const App: React.FC = () => {
           const idx = (y * patW + x) * 4;
           const band = Math.floor(x / 10) % 4;
           if (band === 0) {
-            data[idx] = 239; data[idx + 1] = 68; data[idx + 2] = 68; data[idx + 3] = 255; // red
+            data[idx] = 239; data[idx + 1] = 68; data[idx + 2] = 68; data[idx + 3] = 255;
           } else if (band === 1) {
-            data[idx] = 245; data[idx + 1] = 158; data[idx + 2] = 11; data[idx + 3] = 255; // amber
+            data[idx] = 245; data[idx + 1] = 158; data[idx + 2] = 11; data[idx + 3] = 255;
           } else if (band === 2) {
-            data[idx] = 16; data[idx + 1] = 185; data[idx + 2] = 129; data[idx + 3] = 255; // green
+            data[idx] = 16; data[idx + 1] = 185; data[idx + 2] = 129; data[idx + 3] = 255;
           } else {
-            data[idx] = 99; data[idx + 1] = 102; data[idx + 2] = 241; data[idx + 3] = 255; // indigo
+            data[idx] = 99; data[idx + 1] = 102; data[idx + 2] = 241; data[idx + 3] = 255;
           }
         }
       }
@@ -80,9 +89,9 @@ export const App: React.FC = () => {
           const cy = (y % 20) - 10;
           const dist = Math.sqrt(cx * cx + cy * cy);
           if (dist < 7) {
-            data[idx] = 236; data[idx + 1] = 72; data[idx + 2] = 153; data[idx + 3] = 255; // pink
+            data[idx] = 236; data[idx + 1] = 72; data[idx + 2] = 153; data[idx + 3] = 255;
           } else {
-            data[idx] = 15; data[idx + 1] = 23; data[idx + 2] = 42; data[idx + 3] = 255; // slate
+            data[idx] = 15; data[idx + 1] = 23; data[idx + 2] = 42; data[idx + 3] = 255;
           }
         }
       }
@@ -130,14 +139,20 @@ export const App: React.FC = () => {
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith('image/')) {
-      processImageFile(file, (img) => setCustomDepth(img), { width, height });
+      processImageFile(file, (img) => {
+        setCustomDepth(img);
+        setDepthSource('upload');
+      }, { width, height });
     }
   };
 
   const handleDepthInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      processImageFile(file, (img) => setCustomDepth(img), { width, height });
+      processImageFile(file, (img) => {
+        setCustomDepth(img);
+        setDepthSource('upload');
+      }, { width, height });
     }
   };
 
@@ -160,24 +175,34 @@ export const App: React.FC = () => {
   useEffect(() => {
     // 1. Resolve Depth Map
     let depthMap: DepthMap;
-    if (customDepth) {
+    if (depthSource === 'upload' && customDepth) {
       const floatData = new Float32Array(width * height);
       for (let i = 0; i < width * height; i++) {
         const r = customDepth.data[i * 4]!;
         const g = customDepth.data[i * 4 + 1]!;
         const b = customDepth.data[i * 4 + 2]!;
-        // Grayscale luminance
-        floatData[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+        let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+        if (invertDepth) lum = 1.0 - lum;
+        floatData[i] = lum;
       }
       depthMap = { width, height, data: floatData };
+    } else if (depthSource === 'text') {
+      depthMap = rasterizeText(extrudedText || '3D', width, height, {
+        fontSize: textFontSize,
+        fontWeight: 'bold',
+      });
     } else {
-      if (shape === 'box') {
-        depthMap = createBoxDepthMap(width, height, { boxWidth: 260, boxHeight: 200, boxDepth: 0.85 });
-      } else if (shape === 'slanted') {
-        depthMap = createSlantedPlaneDepthMap(width, height, { minDepth: 0.1, maxDepth: 0.9 });
-      } else {
-        depthMap = createSphereDepthMap(width, height, { radius: 150, peakDepth: 0.95, backgroundDepth: 0.05 });
-      }
+      depthMap = createPrimitiveDepthMap(primitive, width, height);
+    }
+
+    // Apply continuous bevel extrusion
+    if (bevel > 0) {
+      depthMap = applyBevel(depthMap, bevel);
+    }
+
+    // Apply separable Gaussian blur
+    if (blur > 0) {
+      depthMap = applyGaussianBlur(depthMap, blur);
     }
 
     // 2. Render Depth Map Preview
@@ -245,104 +270,186 @@ export const App: React.FC = () => {
             convergenceMode,
             patternSeparation: separation,
             depthFactor,
-            dotScale,
             hsr,
+            dotScale,
             random: prng,
           });
         }
 
-        const outImgData = ctx.createImageData(result.width, result.height);
-        outImgData.data.set(result.data);
-        ctx.putImageData(outImgData, 0, 0);
+        const imgData = ctx.createImageData(width, height);
+        imgData.data.set(result.data);
+        ctx.putImageData(imgData, 0, 0);
       }
     }
   }, [
     generatorMode,
-    shape,
+    depthSource,
+    primitive,
+    extrudedText,
+    textFontSize,
+    bevel,
+    blur,
+    invertDepth,
     customDepth,
     customPattern,
+    patternPreset,
     presetPattern,
     convergenceMode,
     separation,
     depthFactor,
     hsr,
     dotScale,
+    showGuideDots,
     seed,
   ]);
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
     const link = document.createElement('a');
-    const modeName = generatorMode === 'textured' ? 'textured-sis' : 'sirds';
-    link.download = `${modeName}-${convergenceMode}.png`;
+    link.download = generatorMode === 'textured' ? 'textured-stereogram.png' : 'sirds-stereogram.png';
     link.href = canvasRef.current.toDataURL('image/png');
     link.click();
   };
 
+  const maxDisparityCeiling = Math.floor(separation / 3);
+  const effectiveMaxDisparity = Math.floor(maxDisparityCeiling * depthFactor);
+
   return (
     <div className="app-container">
-      <header>
-        <div>
+      <header className="header">
+        <div className="logo-title">
+          <div className="logo-badge">3D</div>
           <h1>Stereogramer Studio</h1>
         </div>
-        <span className="badge">
-          {generatorMode === 'textured' ? 'Textured SIS (TIW Engine)' : 'SIRDS Random Dot (TIW Engine)'}
-        </span>
+        <div className="header-subtitle">
+          Interactive SIRDS & Textured SIS Autostereogram Engine
+        </div>
       </header>
 
-      <div className="main-content">
+      <div className="main-layout">
         <aside className="sidebar">
-          {/* Mode Switcher */}
+          {/* Generator Mode Switch */}
           <div className="control-group">
-            <label>Stereogram Mode</label>
+            <label>Stereogram Type</label>
             <div className="mode-tabs">
               <button
+                type="button"
                 className={`mode-tab ${generatorMode === 'textured' ? 'active' : ''}`}
                 onClick={() => setGeneratorMode('textured')}
               >
                 Textured SIS
               </button>
               <button
+                type="button"
                 className={`mode-tab ${generatorMode === 'sirds' ? 'active' : ''}`}
                 onClick={() => setGeneratorMode('sirds')}
               >
-                SIRDS (Noise)
+                Random Dots (SIRDS)
               </button>
             </div>
           </div>
 
-          {/* Depth Map Source Section */}
+          {/* Depth Map Source Tabs */}
           <div className="control-group">
             <label>Depth Map Source</label>
-            {customDepth ? (
-              <div className="dropzone-loaded">
-                <div className="dropzone-thumb-wrapper">
-                  <img src={customDepth.thumbUrl} alt="Depth map" className="dropzone-thumb" />
-                  <div className="dropzone-file-info">
-                    <span className="dropzone-filename">{customDepth.filename}</span>
-                    <span className="dropzone-dim">{customDepth.width} × {customDepth.height}</span>
-                  </div>
-                </div>
-                <button
-                  className="btn-icon-clear"
-                  title="Remove uploaded depth map"
-                  onClick={() => setCustomDepth(null)}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <>
-                <select
-                  id="shape-select"
-                  value={shape}
-                  onChange={(e) => setShape(e.target.value as DepthShape)}
-                >
-                  <option value="sphere">Procedural 3D Sphere</option>
-                  <option value="box">Procedural 3D Cube / Box</option>
-                  <option value="slanted">Procedural Slanted Ramp</option>
-                </select>
+            <div className="mode-tabs">
+              <button
+                type="button"
+                className={`mode-tab ${depthSource === 'primitive' ? 'active' : ''}`}
+                onClick={() => setDepthSource('primitive')}
+              >
+                3D Shapes
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${depthSource === 'text' ? 'active' : ''}`}
+                onClick={() => setDepthSource('text')}
+              >
+                3D Text
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${depthSource === 'upload' ? 'active' : ''}`}
+                onClick={() => setDepthSource('upload')}
+              >
+                Upload
+              </button>
+            </div>
+          </div>
 
+          {/* Procedural 3D Primitive Controls */}
+          {depthSource === 'primitive' && (
+            <div className="control-group">
+              <label htmlFor="primitive-select">3D Geometry Primitive</label>
+              <select
+                id="primitive-select"
+                value={primitive}
+                onChange={(e) => setPrimitive(e.target.value as DepthPrimitive)}
+              >
+                <option value="sphere">Sphere (Smooth 3D Dome)</option>
+                <option value="torus">Torus (Donut Ring)</option>
+                <option value="cone">Cone (Linear Apex)</option>
+                <option value="cylinder">Cylinder (Rounded Column)</option>
+                <option value="pyramid">Pyramid (4-Sided Facets)</option>
+                <option value="heart">Heart (Puffy 3D Cardioid)</option>
+                <option value="slanted">Slanted Plane (Depth Ramp)</option>
+                <option value="box">Cube / Box (Elevated Plateau)</option>
+              </select>
+            </div>
+          )}
+
+          {/* 3D Extruded Text Controls */}
+          {depthSource === 'text' && (
+            <>
+              <div className="control-group">
+                <label htmlFor="text-input">Extruded Text</label>
+                <input
+                  id="text-input"
+                  type="text"
+                  value={extrudedText}
+                  onChange={(e) => setExtrudedText(e.target.value)}
+                  placeholder="Enter text..."
+                />
+              </div>
+              <div className="control-group">
+                <label htmlFor="font-size-range">
+                  Font Size
+                  <span className="val">{textFontSize}px</span>
+                </label>
+                <input
+                  id="font-size-range"
+                  type="range"
+                  min="24"
+                  max="140"
+                  step="2"
+                  value={textFontSize}
+                  onChange={(e) => setTextFontSize(parseInt(e.target.value, 10))}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Upload Depth Map Controls */}
+          {depthSource === 'upload' && (
+            <div className="control-group">
+              {customDepth ? (
+                <div className="dropzone-loaded">
+                  <div className="dropzone-thumb-wrapper">
+                    <img src={customDepth.thumbUrl} alt="Depth map" className="dropzone-thumb" />
+                    <div className="dropzone-file-info">
+                      <span className="dropzone-filename">{customDepth.filename}</span>
+                      <span className="dropzone-dim">{customDepth.width} × {customDepth.height}</span>
+                    </div>
+                  </div>
+                  <button
+                    className="btn-icon-clear"
+                    title="Remove uploaded depth map"
+                    onClick={() => setCustomDepth(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
                 <div
                   className="dropzone"
                   onDragOver={(e) => e.preventDefault()}
@@ -360,8 +467,51 @@ export const App: React.FC = () => {
                     <span className="dropzone-subtitle">Drop PNG/JPEG or click to browse</span>
                   </div>
                 </div>
-              </>
-            )}
+              )}
+              {customDepth && (
+                <label className="checkbox-label" style={{ marginTop: '0.25rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={invertDepth}
+                    onChange={(e) => setInvertDepth(e.target.checked)}
+                  />
+                  Invert Depth Polarity
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* Depth Smoothing & Edge Shaping Controls */}
+          <div className="control-group">
+            <label htmlFor="bevel-range">
+              Bevel Extrusion
+              <span className="val">{bevel}px</span>
+            </label>
+            <input
+              id="bevel-range"
+              type="range"
+              min="0"
+              max="20"
+              step="1"
+              value={bevel}
+              onChange={(e) => setBevel(parseInt(e.target.value, 10))}
+            />
+          </div>
+
+          <div className="control-group">
+            <label htmlFor="blur-range">
+              Gaussian Blur
+              <span className="val">{blur.toFixed(1)}px</span>
+            </label>
+            <input
+              id="blur-range"
+              type="range"
+              min="0"
+              max="10"
+              step="0.5"
+              value={blur}
+              onChange={(e) => setBlur(parseFloat(e.target.value))}
+            />
           </div>
 
           {/* Pattern Texture Source Section (for Textured SIS) */}
@@ -418,7 +568,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Viewing & Geometry Controls */}
+          {/* Viewing & Convergence Controls */}
           <div className="control-group">
             <label>Convergence Mode</label>
             <div className="mode-tabs">
@@ -439,6 +589,7 @@ export const App: React.FC = () => {
             </div>
           </div>
 
+          {/* Separation Slider */}
           <div className="control-group">
             <label htmlFor="separation-range">
               Pattern Separation
@@ -447,33 +598,43 @@ export const App: React.FC = () => {
             <input
               id="separation-range"
               type="range"
-              min="50"
-              max="140"
+              min="40"
+              max="160"
               step="2"
               value={separation}
               onChange={(e) => setSeparation(parseInt(e.target.value, 10))}
             />
           </div>
 
+          {/* Depth Factor Slider */}
           <div className="control-group">
             <label htmlFor="depth-factor-range">
-              Depth Factor
-              <span className="val">{depthFactor.toFixed(2)}</span>
+              Relief Depth Factor
+              <span className="val">{(depthFactor * 100).toFixed(0)}%</span>
             </label>
             <input
               id="depth-factor-range"
               type="range"
-              min="0.05"
+              min="0.1"
               max="1.0"
               step="0.05"
               value={depthFactor}
               onChange={(e) => setDepthFactor(parseFloat(e.target.value))}
             />
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-              Disparity ceiling: ≤ {Math.floor(separation / 3)}px ({((Math.floor(separation / 3) / separation) * 100).toFixed(0)}% of separation)
+          </div>
+
+          {/* Disparity Ceiling Display */}
+          <div className="disparity-callout">
+            <div className="disparity-label">
+              <span>Max Disparity Ceiling (S/3):</span>
+              <span className="disparity-value">{effectiveMaxDisparity}px</span>
+            </div>
+            <div className="disparity-subtext">
+              Strictly clamped to &le; {maxDisparityCeiling}px (33.3% of S) to prevent visual fusion strain
             </div>
           </div>
 
+          {/* SIRDS Dot Scale */}
           {generatorMode === 'sirds' && (
             <div className="control-group">
               <label htmlFor="dot-scale-range">
@@ -492,6 +653,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* Toggles */}
           <label className="checkbox-label">
             <input
               type="checkbox"
