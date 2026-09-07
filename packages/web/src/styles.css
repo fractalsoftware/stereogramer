@@ -180,6 +180,7 @@ input[type="range"] {
   top: 12px;
   left: 0;
   right: 0;
+  height: 20px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -404,4 +405,211 @@ input[type="range"] {
   border: 1px solid var(--surface-border);
   background-color: #000;
 }
+
+/* Viewport Controls Toolbar (Zoom, Pan, Reset) */
+.viewport-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--surface-color);
+  border: 1px solid var(--surface-border);
+  padding: 0.4rem 0.75rem;
+  border-radius: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover {
+  background-color: var(--surface-border);
+  color: var(--primary);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--surface-border);
+}
+
+.zoom-indicator {
+  font-size: 0.8rem;
+  font-family: monospace;
+  color: var(--text-muted);
+  min-width: 48px;
+  text-align: center;
+}
+
+/* Export Buttons */
+.export-group {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.export-group .btn-primary {
+  flex: 1;
+  text-align: center;
+}
+
+.export-group .btn-secondary {
+  flex: 1;
+  text-align: center;
+}
+
+/* Preset Drawer Trigger & Modal */
+.btn-preset-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: rgba(56, 189, 248, 0.1);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  padding: 0.65rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-preset-trigger:hover {
+  background-color: rgba(56, 189, 248, 0.2);
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer-panel {
+  width: 420px;
+  max-width: 90vw;
+  height: 100%;
+  background-color: var(--surface-color);
+  border-left: 1px solid var(--surface-border);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  gap: 1.5rem;
+  overflow-y: auto;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: 1rem;
+}
+
+.drawer-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-close-drawer {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.btn-close-drawer:hover {
+  color: #fff;
+  background-color: var(--surface-border);
+}
+
+.preset-section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.preset-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.preset-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: var(--bg-color);
+  border: 1px solid var(--surface-border);
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.preset-card:hover {
+  border-color: var(--primary);
+  background-color: rgba(56, 189, 248, 0.05);
+  transform: translateY(-1px);
+}
+
+.preset-card.active {
+  border-color: var(--primary);
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+.preset-card-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.preset-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.preset-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.preset-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 

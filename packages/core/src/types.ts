@@ -67,10 +67,10 @@ export interface SirdsOptions {
   hsr?: boolean;
 
   /**
-   * Palette of RGBA colors used for the random dot substrate.
-   * Default: Black and White ([ [0, 0, 0, 255], [255, 255, 255, 255] ]).
+   * Palette of RGBA colors or named preset used for the random dot substrate.
+   * Default: Black and White ('bw').
    */
-  palette?: RgbaColor[];
+  palette?: RgbaColor[] | SirdsPaletteName;
 
   /**
    * Custom pseudo-random number generator returning a float in [0.0, 1.0).
@@ -78,6 +78,37 @@ export interface SirdsOptions {
    * Default: Math.random.
    */
   random?: () => number;
+}
+
+/**
+ * Named color palettes for SIRDS noise substrate.
+ */
+export type SirdsPaletteName = 'bw' | 'grayscale' | 'rgb' | 'duotone';
+
+/**
+ * Options for generating seamless procedural Perlin noise textures.
+ */
+export interface PerlinTextureOptions {
+  /** Frequency / feature scale. Default: 16. */
+  scale?: number;
+  /** Octaves of noise summation. Default: 3. */
+  octaves?: number;
+  /** Primary foreground color. Default: [56, 189, 248, 255] (sky cyan). */
+  colorA?: RgbaColor;
+  /** Background / secondary color. Default: [15, 23, 42, 255] (slate dark). */
+  colorB?: RgbaColor;
+}
+
+/**
+ * Options for generating seamless procedural Voronoi cellular textures.
+ */
+export interface VoronoiTextureOptions {
+  /** Number of cell seed centers. Default: 18. */
+  numCells?: number;
+  /** Cell interior color. Default: [236, 72, 153, 255] (pink). */
+  colorA?: RgbaColor;
+  /** Cell boundary edge color. Default: [30, 41, 59, 255] (slate). */
+  colorB?: RgbaColor;
 }
 
 /**

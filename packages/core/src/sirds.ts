@@ -1,5 +1,6 @@
 import { calculateSeparation } from './separation.js';
 import { isSurfaceVisible } from './hsr.js';
+import { resolveSirdsPalette } from './palettes.js';
 import type { DepthMap, RgbaColor, RgbaImage, SirdsOptions, ConvergenceMode } from './types.js';
 
 export const DEFAULT_PALETTE: RgbaColor[] = [
@@ -87,7 +88,7 @@ export function generateSirds(depthMap: DepthMap, options: SirdsOptions = {}): R
   }
 
   const dotScale = Math.max(1, Math.floor(options.dotScale ?? 1));
-  const palette = options.palette && options.palette.length > 0 ? options.palette : DEFAULT_PALETTE;
+  const palette = resolveSirdsPalette(options.palette);
   const random = options.random ?? Math.random;
   const convergenceMode = options.convergenceMode ?? 'parallel';
   const depthFactor = options.depthFactor ?? 1.0;

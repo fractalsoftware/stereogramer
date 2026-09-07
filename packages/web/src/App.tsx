@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   generateSirds,
   generateTexturedStereogram,
@@ -6,16 +6,21 @@ import {
   applyGaussianBlur,
   applyBevel,
   rasterizeText,
-  createCheckerboardPattern,
-  getDefaultPatternSeparation,
   type DepthMap,
   type RgbaImage,
   type ConvergenceMode,
   type DepthPrimitive,
+  type SirdsPaletteName,
 } from '@stereogramer/core';
+import {
+  SAMPLE_DEPTH_MAPS,
+  TEXTURE_PRESETS,
+  type SampleDepthName,
+  type TexturePresetName,
+} from './presets.js';
 
 type GeneratorMode = 'sirds' | 'textured';
-type DepthSource = 'primitive' | 'text' | 'upload';
+type DepthSource = 'preset' | 'primitive' | 'text' | 'upload';
 
 interface UploadedImage {
   width: number;
@@ -26,8 +31,10 @@ interface UploadedImage {
 }
 
 export const App: React.FC = () => {
+  // Mode & Source state
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('textured');
-  const [depthSource, setDepthSource] = useState<DepthSource>('primitive');
+  const [depthSource, setDepthSource] = useState<DepthSource>('preset');
+  const [selectedDepthPreset, setSelectedDepthPreset] = useState<SampleDepthName>('shark');
   const [primitive, setPrimitive] = useState<DepthPrimitive>('sphere');
   const [extrudedText, setExtrudedText] = useState<string>('3D MAGIC');
   const [textFontSize, setTextFontSize] = useState<number>(72);
@@ -35,69 +42,69 @@ export const App: React.FC = () => {
   const [blur, setBlur] = useState<number>(0);
   const [invertDepth, setInvertDepth] = useState<boolean>(false);
 
+  // Pattern / Texture state
+  const [selectedTexturePreset, setSelectedTexturePreset] = useState<TexturePresetName>('perlin');
   const [customDepth, setCustomDepth] = useState<UploadedImage | null>(null);
   const [customPattern, setCustomPattern] = useState<UploadedImage | null>(null);
-  const [patternPreset, setPatternPreset] = useState<'geometric' | 'mosaic' | 'stripes'>('geometric');
 
+  // Stereogram configuration parameters
   const [convergenceMode, setConvergenceMode] = useState<ConvergenceMode>('parallel');
   const [separation, setSeparation] = useState<number>(80);
   const [depthFactor, setDepthFactor] = useState<number>(0.85);
   const [hsr, setHsr] = useState<boolean>(true);
   const [dotScale, setDotScale] = useState<number>(1);
+  const [sirdsPalette, setSirdsPalette] = useState<SirdsPaletteName>('bw');
   const [showGuideDots, setShowGuideDots] = useState<boolean>(true);
   const [showPreviews, setShowPreviews] = useState<boolean>(true);
   const [seed, setSeed] = useState<number>(1);
 
+  // Preset Drawer
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  // Zoom & Pan interactive viewer state
+  const [zoom, setZoom] = useState<number>(1.0);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number; startPanX: number; startPanY: number }>({
+    x: 0,
+    y: 0,
+    startPanX: 0,
+    startPanY: 0,
+  });
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const depthCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const patternCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const requestIdRef = useRef<number>(0);
 
   const width = 640;
   const height = 480;
 
-  // Preset patterns generated via pure typed arrays
-  const presetPattern = useMemo<RgbaImage>(() => {
-    const patW = 80;
-    const patH = 60;
-    if (patternPreset === 'geometric') {
-      return createCheckerboardPattern(patW, patH, 10, [56, 189, 248, 255], [30, 41, 59, 255]);
-    } else if (patternPreset === 'stripes') {
-      const data = new Uint8ClampedArray(patW * patH * 4);
-      for (let y = 0; y < patH; y++) {
-        for (let x = 0; x < patW; x++) {
-          const idx = (y * patW + x) * 4;
-          const band = Math.floor(x / 10) % 4;
-          if (band === 0) {
-            data[idx] = 239; data[idx + 1] = 68; data[idx + 2] = 68; data[idx + 3] = 255;
-          } else if (band === 1) {
-            data[idx] = 245; data[idx + 1] = 158; data[idx + 2] = 11; data[idx + 3] = 255;
-          } else if (band === 2) {
-            data[idx] = 16; data[idx + 1] = 185; data[idx + 2] = 129; data[idx + 3] = 255;
-          } else {
-            data[idx] = 99; data[idx + 1] = 102; data[idx + 2] = 241; data[idx + 3] = 255;
-          }
-        }
-      }
-      return { width: patW, height: patH, data };
-    } else {
-      // Mosaic circles / dots
-      const data = new Uint8ClampedArray(patW * patH * 4);
-      for (let y = 0; y < patH; y++) {
-        for (let x = 0; x < patW; x++) {
-          const idx = (y * patW + x) * 4;
-          const cx = (x % 20) - 10;
-          const cy = (y % 20) - 10;
-          const dist = Math.sqrt(cx * cx + cy * cy);
-          if (dist < 7) {
-            data[idx] = 236; data[idx + 1] = 72; data[idx + 2] = 153; data[idx + 3] = 255;
-          } else {
-            data[idx] = 15; data[idx + 1] = 23; data[idx + 2] = 42; data[idx + 3] = 255;
-          }
-        }
-      }
-      return { width: patW, height: patH, data };
+  // Initialize Web Worker
+  useEffect(() => {
+    try {
+      workerRef.current = new Worker(new URL('./stereogram.worker.ts', import.meta.url), {
+        type: 'module',
+      });
+    } catch {
+      // Fallback to inline computation if Web Workers unavailable in test env
+      workerRef.current = null;
     }
-  }, [patternPreset]);
+
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, []);
+
+  // Preset pattern resolution (80x60 seamless pattern tiles)
+  const activePattern = useMemo<RgbaImage>(() => {
+    if (customPattern) {
+      return { width: customPattern.width, height: customPattern.height, data: customPattern.data };
+    }
+    const preset = TEXTURE_PRESETS.find((p) => p.id === selectedTexturePreset) || TEXTURE_PRESETS[0]!;
+    return preset.generate(80, 60);
+  }, [customPattern, selectedTexturePreset]);
 
   // Handle image upload from file or drop
   const processImageFile = (
@@ -172,6 +179,44 @@ export const App: React.FC = () => {
     }
   };
 
+  // Zoom & Pan Handlers
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    setZoom((prev) => Math.min(3.0, Math.max(0.5, parseFloat((prev + delta).toFixed(2)))));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      startPanX: pan.x,
+      startPanY: pan.y,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    setPan({
+      x: dragStartRef.current.startPanX + dx,
+      y: dragStartRef.current.startPanY + dy,
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleResetView = () => {
+    setZoom(1.0);
+    setPan({ x: 0, y: 0 });
+  };
+
+  // Main stereogram computation and rendering loop
   useEffect(() => {
     // 1. Resolve Depth Map
     let depthMap: DepthMap;
@@ -191,8 +236,12 @@ export const App: React.FC = () => {
         fontSize: textFontSize,
         fontWeight: 'bold',
       });
-    } else {
+    } else if (depthSource === 'primitive') {
       depthMap = createPrimitiveDepthMap(primitive, width, height);
+    } else {
+      // Curated Starter Preset
+      const pInfo = SAMPLE_DEPTH_MAPS.find((p) => p.id === selectedDepthPreset) || SAMPLE_DEPTH_MAPS[0]!;
+      depthMap = pInfo.generate(width, height);
     }
 
     // Apply continuous bevel extrusion
@@ -226,10 +275,6 @@ export const App: React.FC = () => {
     }
 
     // 3. Render Pattern Preview (when in Textured SIS mode)
-    const activePattern: RgbaImage = customPattern
-      ? { width: customPattern.width, height: customPattern.height, data: customPattern.data }
-      : presetPattern;
-
     if (patternCanvasRef.current && generatorMode === 'textured') {
       const pCanvas = patternCanvasRef.current;
       pCanvas.width = activePattern.width;
@@ -242,48 +287,87 @@ export const App: React.FC = () => {
       }
     }
 
-    // 4. Render Autostereogram
-    if (canvasRef.current) {
+    // 4. Offload Autostereogram Generation to Web Worker (with inline fallback)
+    const currentRequestId = ++requestIdRef.current;
+
+    const renderStereogramToCanvas = (resultData: Uint8ClampedArray) => {
+      if (!canvasRef.current) return;
       const canvas = canvasRef.current;
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        let result: RgbaImage;
+        const imgData = ctx.createImageData(width, height);
+        imgData.data.set(resultData);
+        ctx.putImageData(imgData, 0, 0);
+      }
+    };
 
-        if (generatorMode === 'textured') {
-          result = generateTexturedStereogram(depthMap, activePattern, {
-            convergenceMode,
-            patternSeparation: separation,
-            depthFactor,
-            hsr,
-          });
-        } else {
-          // SIRDS with deterministic PRNG
-          let currentSeed = seed * 10007;
-          const prng = () => {
-            currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
-            return currentSeed / 4294967296;
-          };
+    if (workerRef.current) {
+      const worker = workerRef.current;
+      worker.onmessage = (e) => {
+        if (e.data.id === requestIdRef.current) {
+          renderStereogramToCanvas(new Uint8ClampedArray(e.data.data));
+        }
+      };
 
-          result = generateSirds(depthMap, {
+      const depthBuffer = depthMap.data.buffer.slice(0);
+      const patternBuffer = activePattern.data.buffer.slice(0);
+
+      worker.postMessage(
+        {
+          id: currentRequestId,
+          mode: generatorMode,
+          depthWidth: width,
+          depthHeight: height,
+          depthBuffer,
+          patternWidth: activePattern.width,
+          patternHeight: activePattern.height,
+          patternBuffer,
+          options: {
             convergenceMode,
             patternSeparation: separation,
             depthFactor,
             hsr,
             dotScale,
-            random: prng,
-          });
-        }
-
-        const imgData = ctx.createImageData(width, height);
-        imgData.data.set(result.data);
-        ctx.putImageData(imgData, 0, 0);
+            palette: sirdsPalette,
+            seed,
+          },
+        },
+        [depthBuffer, patternBuffer]
+      );
+    } else {
+      // Main-thread fallback
+      let result: RgbaImage;
+      if (generatorMode === 'textured') {
+        result = generateTexturedStereogram(depthMap, activePattern, {
+          convergenceMode,
+          patternSeparation: separation,
+          depthFactor,
+          hsr,
+        });
+      } else {
+        let currentSeed = seed * 10007;
+        const prng = () => {
+          currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
+          return currentSeed / 4294967296;
+        };
+        result = generateSirds(depthMap, {
+          convergenceMode,
+          patternSeparation: separation,
+          depthFactor,
+          hsr,
+          dotScale,
+          palette: sirdsPalette,
+          random: prng,
+        });
       }
+      renderStereogramToCanvas(result.data);
     }
   }, [
     generatorMode,
     depthSource,
+    selectedDepthPreset,
     primitive,
     extrudedText,
     textFontSize,
@@ -292,24 +376,25 @@ export const App: React.FC = () => {
     invertDepth,
     customDepth,
     customPattern,
-    patternPreset,
-    presetPattern,
+    selectedTexturePreset,
+    activePattern,
     convergenceMode,
     separation,
     depthFactor,
     hsr,
     dotScale,
-    showGuideDots,
+    sirdsPalette,
     seed,
   ]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback((format: 'png' | 'jpeg') => {
     if (!canvasRef.current) return;
     const link = document.createElement('a');
-    link.download = generatorMode === 'textured' ? 'textured-stereogram.png' : 'sirds-stereogram.png';
-    link.href = canvasRef.current.toDataURL('image/png');
+    const filename = `${generatorMode}-stereogram.${format === 'jpeg' ? 'jpg' : 'png'}`;
+    link.download = filename;
+    link.href = canvasRef.current.toDataURL(format === 'jpeg' ? 'image/jpeg' : 'image/png', 0.95);
     link.click();
-  };
+  }, [generatorMode]);
 
   const maxDisparityCeiling = Math.floor(separation / 3);
   const effectiveMaxDisparity = Math.floor(maxDisparityCeiling * depthFactor);
@@ -328,6 +413,17 @@ export const App: React.FC = () => {
 
       <div className="main-layout">
         <aside className="sidebar">
+          {/* Preset Library Drawer Trigger */}
+          <button
+            type="button"
+            className="btn-preset-trigger"
+            id="preset-drawer-trigger"
+            onClick={() => setIsDrawerOpen(true)}
+          >
+            <span>📚</span>
+            <span>Browse Presets & Textures</span>
+          </button>
+
           {/* Generator Mode Switch */}
           <div className="control-group">
             <label>Stereogram Type</label>
@@ -355,17 +451,24 @@ export const App: React.FC = () => {
             <div className="mode-tabs">
               <button
                 type="button"
+                className={`mode-tab ${depthSource === 'preset' ? 'active' : ''}`}
+                onClick={() => setDepthSource('preset')}
+              >
+                Presets
+              </button>
+              <button
+                type="button"
                 className={`mode-tab ${depthSource === 'primitive' ? 'active' : ''}`}
                 onClick={() => setDepthSource('primitive')}
               >
-                3D Shapes
+                Shapes
               </button>
               <button
                 type="button"
                 className={`mode-tab ${depthSource === 'text' ? 'active' : ''}`}
                 onClick={() => setDepthSource('text')}
               >
-                3D Text
+                Text
               </button>
               <button
                 type="button"
@@ -376,6 +479,24 @@ export const App: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Preset Selector */}
+          {depthSource === 'preset' && (
+            <div className="control-group">
+              <label htmlFor="depth-preset-select">Curated Depth Model</label>
+              <select
+                id="depth-preset-select"
+                value={selectedDepthPreset}
+                onChange={(e) => setSelectedDepthPreset(e.target.value as SampleDepthName)}
+              >
+                {SAMPLE_DEPTH_MAPS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.icon} {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Procedural 3D Primitive Controls */}
           {depthSource === 'primitive' && (
@@ -538,12 +659,15 @@ export const App: React.FC = () => {
               ) : (
                 <>
                   <select
-                    value={patternPreset}
-                    onChange={(e) => setPatternPreset(e.target.value as any)}
+                    id="texture-preset-select"
+                    value={selectedTexturePreset}
+                    onChange={(e) => setSelectedTexturePreset(e.target.value as TexturePresetName)}
                   >
-                    <option value="geometric">Preset: Geometric Tiles</option>
-                    <option value="stripes">Preset: Color Stripes</option>
-                    <option value="mosaic">Preset: Dot Mosaic</option>
+                    {TEXTURE_PRESETS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                   </select>
 
                   <div
@@ -566,6 +690,41 @@ export const App: React.FC = () => {
                 </>
               )}
             </div>
+          )}
+
+          {/* SIRDS Palette & Dot Scale (for SIRDS) */}
+          {generatorMode === 'sirds' && (
+            <>
+              <div className="control-group">
+                <label htmlFor="sirds-palette-select">SIRDS Color Palette</label>
+                <select
+                  id="sirds-palette-select"
+                  value={sirdsPalette}
+                  onChange={(e) => setSirdsPalette(e.target.value as SirdsPaletteName)}
+                >
+                  <option value="bw">Black & White (1-Bit)</option>
+                  <option value="grayscale">Grayscale (16 Shades)</option>
+                  <option value="rgb">Full RGB Spectral</option>
+                  <option value="duotone">Electric Duotone (Teal & Amber)</option>
+                </select>
+              </div>
+
+              <div className="control-group">
+                <label htmlFor="dot-scale-range">
+                  Dot Scale (Retina Display)
+                  <span className="val">{dotScale}px</span>
+                </label>
+                <input
+                  id="dot-scale-range"
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="1"
+                  value={dotScale}
+                  onChange={(e) => setDotScale(parseInt(e.target.value, 10))}
+                />
+              </div>
+            </>
           )}
 
           {/* Viewing & Convergence Controls */}
@@ -630,28 +789,9 @@ export const App: React.FC = () => {
               <span className="disparity-value">{effectiveMaxDisparity}px</span>
             </div>
             <div className="disparity-subtext">
-              Strictly clamped to &le; {maxDisparityCeiling}px (33.3% of S) to prevent visual fusion strain
+              Clamped to &le; {maxDisparityCeiling}px (33.3% of S) to prevent visual fusion strain
             </div>
           </div>
-
-          {/* SIRDS Dot Scale */}
-          {generatorMode === 'sirds' && (
-            <div className="control-group">
-              <label htmlFor="dot-scale-range">
-                Dot Scale
-                <span className="val">{dotScale}px</span>
-              </label>
-              <input
-                id="dot-scale-range"
-                type="range"
-                min="1"
-                max="4"
-                step="1"
-                value={dotScale}
-                onChange={(e) => setDotScale(parseInt(e.target.value, 10))}
-              />
-            </div>
-          )}
 
           {/* Toggles */}
           <label className="checkbox-label">
@@ -687,13 +827,73 @@ export const App: React.FC = () => {
             </button>
           )}
 
-          <button className="btn-primary" onClick={handleDownload}>
-            Download Image (PNG)
-          </button>
+          {/* Export Action Buttons */}
+          <div className="export-group">
+            <button
+              className="btn-primary"
+              id="download-png-btn"
+              onClick={() => handleDownload('png')}
+            >
+              Export PNG
+            </button>
+            <button
+              className="btn-secondary"
+              id="download-jpeg-btn"
+              onClick={() => handleDownload('jpeg')}
+            >
+              Export JPEG
+            </button>
+          </div>
         </aside>
 
         <main className="viewport-container">
-          <div className="canvas-wrapper" style={{ width, height }}>
+          {/* Zoom & Pan Viewport Toolbar */}
+          <div className="viewport-toolbar">
+            <button
+              type="button"
+              className="toolbar-btn"
+              title="Zoom In"
+              onClick={() => setZoom((z) => Math.min(3.0, parseFloat((z + 0.2).toFixed(1))))}
+            >
+              ➕
+            </button>
+            <span className="zoom-indicator">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className="toolbar-btn"
+              title="Zoom Out"
+              onClick={() => setZoom((z) => Math.max(0.5, parseFloat((z - 0.2).toFixed(1))))}
+            >
+              ➖
+            </button>
+            <div className="toolbar-divider" />
+            <button
+              type="button"
+              className="toolbar-btn"
+              title="Reset View"
+              onClick={handleResetView}
+            >
+              Reset View
+            </button>
+          </div>
+
+          {/* Interactive Zoomable / Pannable Canvas Wrapper */}
+          <div
+            className="canvas-wrapper"
+            style={{
+              width,
+              height,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: 'center center',
+              cursor: isDragging ? 'grabbing' : 'grab',
+              userSelect: 'none',
+            }}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
             <canvas ref={canvasRef} width={width} height={height} />
             {showGuideDots && (
               <div className="guide-dots-overlay">
@@ -746,6 +946,72 @@ export const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Preset Library Drawer Modal */}
+      {isDrawerOpen && (
+        <div className="drawer-overlay" onClick={() => setIsDrawerOpen(false)}>
+          <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div className="drawer-title">
+                <span>📚</span> Preset Library & Textures
+              </div>
+              <button
+                type="button"
+                className="btn-close-drawer"
+                onClick={() => setIsDrawerOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <div className="preset-section-title">3D Depth Model Presets</div>
+              <div className="preset-grid">
+                {SAMPLE_DEPTH_MAPS.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className={`preset-card ${selectedDepthPreset === preset.id && depthSource === 'preset' ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedDepthPreset(preset.id);
+                      setDepthSource('preset');
+                      setIsDrawerOpen(false);
+                    }}
+                  >
+                    <span className="preset-card-icon">{preset.icon}</span>
+                    <div className="preset-card-info">
+                      <span className="preset-card-name">{preset.name}</span>
+                      <span className="preset-card-desc">{preset.description}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="preset-section-title">Procedural Seamless Textures</div>
+              <div className="preset-grid">
+                {TEXTURE_PRESETS.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className={`preset-card ${selectedTexturePreset === preset.id && !customPattern ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedTexturePreset(preset.id);
+                      setCustomPattern(null);
+                      setGeneratorMode('textured');
+                      setIsDrawerOpen(false);
+                    }}
+                  >
+                    <div className="preset-card-info">
+                      <span className="preset-card-name">{preset.name}</span>
+                      <span className="preset-card-desc">{preset.description}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
