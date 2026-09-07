@@ -420,15 +420,23 @@ export const App: React.FC = () => {
 
           {/* Viewing & Geometry Controls */}
           <div className="control-group">
-            <label htmlFor="mode-select">Convergence Mode</label>
-            <select
-              id="mode-select"
-              value={convergenceMode}
-              onChange={(e) => setConvergenceMode(e.target.value as ConvergenceMode)}
-            >
-              <option value="parallel">Parallel (Wall-eyed)</option>
-              <option value="cross">Cross-eyed</option>
-            </select>
+            <label>Convergence Mode</label>
+            <div className="mode-tabs">
+              <button
+                type="button"
+                className={`mode-tab ${convergenceMode === 'parallel' ? 'active' : ''}`}
+                onClick={() => setConvergenceMode('parallel')}
+              >
+                Parallel
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${convergenceMode === 'cross' ? 'active' : ''}`}
+                onClick={() => setConvergenceMode('cross')}
+              >
+                Cross-eyed
+              </button>
+            </div>
           </div>
 
           <div className="control-group">
@@ -499,7 +507,7 @@ export const App: React.FC = () => {
               checked={showGuideDots}
               onChange={(e) => setShowGuideDots(e.target.checked)}
             />
-            Show Guide Dots
+            Show Guide Dots ({separation}px spacing)
           </label>
 
           <label className="checkbox-label">
