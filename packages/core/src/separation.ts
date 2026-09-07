@@ -31,7 +31,7 @@ export function calculateSeparation(
   convergenceMode: ConvergenceMode = 'parallel'
 ): number {
   const S = Math.max(1, Math.round(baseSeparation));
-  const f = Math.max(0, Math.min(1, depthFactor));
+  const f = Number.isFinite(depthFactor) ? Math.max(0, Math.min(1, depthFactor)) : 0.0;
   let z = Number.isFinite(depth) ? Math.max(0, Math.min(1, depth)) : 0;
 
   if (convergenceMode === 'cross') {
@@ -44,7 +44,9 @@ export function calculateSeparation(
   }
 
   const sep = Math.round(((1.0 - mu * z) / (2.0 - mu * z)) * 2.0 * S);
-  const minSeparation = Math.floor(S * (1.0 - MAX_DISPARITY_FRACTION * f));
+  const maxDisparityCeiling = Math.floor(S * MAX_DISPARITY_FRACTION);
+  const maxAllowedDisparity = Math.floor(maxDisparityCeiling * f);
+  const minSeparation = S - maxAllowedDisparity;
   return Math.max(minSeparation, Math.min(S, sep));
 }
 

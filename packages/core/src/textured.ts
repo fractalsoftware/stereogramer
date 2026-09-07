@@ -47,6 +47,7 @@ export function generateTexturedStereogram(
 
   const convergenceMode = options.convergenceMode ?? 'parallel';
   const depthFactor = options.depthFactor ?? 1.0;
+  const hsr = options.hsr !== false;
   const baseSeparation = Math.max(
     1,
     Math.round(options.patternSeparation ?? getDefaultPatternSeparation(width))
@@ -102,7 +103,7 @@ export function generateTexturedStereogram(
       let right = left + sep;
 
       if (left >= 0 && right < width) {
-        const visible = isSurfaceVisible(
+        const visible = !hsr || isSurfaceVisible(
           x,
           z,
           rowDepth,

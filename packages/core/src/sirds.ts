@@ -11,6 +11,7 @@ export interface ScanlineConstraintOptions {
   baseSeparation: number;
   depthFactor?: number;
   convergenceMode?: ConvergenceMode;
+  hsr?: boolean;
 }
 
 /**
@@ -26,7 +27,7 @@ export function computeScanlineConstraints(
   y: number,
   options: ScanlineConstraintOptions
 ): Int32Array {
-  const { baseSeparation, depthFactor = 1.0, convergenceMode = 'parallel' } = options;
+  const { baseSeparation, depthFactor = 1.0, convergenceMode = 'parallel', hsr = true } = options;
   const same = new Int32Array(width);
   for (let x = 0; x < width; x++) {
     same[x] = x;
@@ -43,7 +44,7 @@ export function computeScanlineConstraints(
     let right = left + sep;
 
     if (left >= 0 && right < width) {
-      const visible = isSurfaceVisible(
+      const visible = !hsr || isSurfaceVisible(
         x,
         z,
         depthRow,
@@ -90,6 +91,7 @@ export function generateSirds(depthMap: DepthMap, options: SirdsOptions = {}): R
   const random = options.random ?? Math.random;
   const convergenceMode = options.convergenceMode ?? 'parallel';
   const depthFactor = options.depthFactor ?? 1.0;
+  const hsr = options.hsr !== false;
   const baseSeparation = Math.max(1, Math.round(options.patternSeparation ?? Math.round(width / 8)));
 
   const outPixels = new Uint8ClampedArray(width * height * 4);
@@ -120,7 +122,7 @@ export function generateSirds(depthMap: DepthMap, options: SirdsOptions = {}): R
         let right = left + sep;
 
         if (left >= 0 && right < width) {
-          const visible = isSurfaceVisible(
+          const visible = !hsr || isSurfaceVisible(
             x,
             z,
             rowDepth,

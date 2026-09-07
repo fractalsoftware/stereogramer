@@ -59,6 +59,14 @@ export interface SirdsOptions {
   dotScale?: number;
 
   /**
+   * Enable geometric Hidden Surface Removal (HSR).
+   * When true (default), ray casting detects and breaks occluded constraint links
+   * behind foreground surface steps, eliminating ghost echoes and visual shearing.
+   * Default: true.
+   */
+  hsr?: boolean;
+
+  /**
    * Palette of RGBA colors used for the random dot substrate.
    * Default: Black and White ([ [0, 0, 0, 255], [255, 255, 255, 255] ]).
    */
@@ -93,6 +101,14 @@ export interface TexturedStereogramOptions {
    * Default: 1.0.
    */
   depthFactor?: number;
+
+  /**
+   * Enable geometric Hidden Surface Removal (HSR).
+   * When true (default), ray casting detects and breaks occluded constraint links
+   * behind foreground surface steps, eliminating ghost echoes and visual shearing.
+   * Default: true.
+   */
+  hsr?: boolean;
 }
 
 /**
