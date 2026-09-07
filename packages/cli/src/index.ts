@@ -39,6 +39,10 @@ async function main() {
         const depthFactor = Math.max(0, Math.min(1, parseFloat(rawFactor) || 1.0));
         const hsr = opts.hsr !== false;
         const dotScale = Math.max(1, parseInt(opts.dotScale, 10) || 1);
+        if (opts.mode && opts.mode !== 'parallel' && opts.mode !== 'cross') {
+          console.error(`Error: Invalid convergence mode "${opts.mode}". Must be "parallel" or "cross".`);
+          process.exit(1);
+        }
         const mode: ConvergenceMode = opts.mode === 'cross' ? 'cross' : 'parallel';
         const separation = opts.separation ? parseInt(opts.separation, 10) : undefined;
         const defaultOutput = opts.pattern ? 'textured-sis.png' : 'sirds.png';
