@@ -33,6 +33,7 @@ export const App: React.FC = () => {
   const [convergenceMode, setConvergenceMode] = useState<ConvergenceMode>('parallel');
   const [separation, setSeparation] = useState<number>(80);
   const [depthFactor, setDepthFactor] = useState<number>(0.85);
+  const [hsr, setHsr] = useState<boolean>(true);
   const [dotScale, setDotScale] = useState<number>(1);
   const [showGuideDots, setShowGuideDots] = useState<boolean>(true);
   const [showPreviews, setShowPreviews] = useState<boolean>(true);
@@ -230,6 +231,7 @@ export const App: React.FC = () => {
             convergenceMode,
             patternSeparation: separation,
             depthFactor,
+            hsr,
           });
         } else {
           // SIRDS with deterministic PRNG
@@ -244,6 +246,7 @@ export const App: React.FC = () => {
             patternSeparation: separation,
             depthFactor,
             dotScale,
+            hsr,
             random: prng,
           });
         }
@@ -262,6 +265,7 @@ export const App: React.FC = () => {
     convergenceMode,
     separation,
     depthFactor,
+    hsr,
     dotScale,
     seed,
   ]);
@@ -451,12 +455,15 @@ export const App: React.FC = () => {
             <input
               id="depth-factor-range"
               type="range"
-              min="0.1"
+              min="0.05"
               max="1.0"
               step="0.05"
               value={depthFactor}
               onChange={(e) => setDepthFactor(parseFloat(e.target.value))}
             />
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+              Disparity ceiling: ≤ {Math.floor(separation / 3)}px ({((Math.floor(separation / 3) / separation) * 100).toFixed(0)}% of separation)
+            </div>
           </div>
 
           {generatorMode === 'sirds' && (
@@ -476,6 +483,15 @@ export const App: React.FC = () => {
               />
             </div>
           )}
+
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={hsr}
+              onChange={(e) => setHsr(e.target.checked)}
+            />
+            Hidden Surface Removal (HSR)
+          </label>
 
           <label className="checkbox-label">
             <input

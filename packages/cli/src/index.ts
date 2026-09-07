@@ -27,13 +27,17 @@ async function main() {
     .option('-w, --width <pixels>', 'Image width in pixels')
     .option('-h, --height <pixels>', 'Image height in pixels')
     .option('-s, --separation <pixels>', 'Base pattern separation distance in pixels')
-    .option('-f, --depth-factor <factor>', 'Depth intensity factor [0.0 - 1.0]', '1.0')
+    .option('-f, --factor <factor>', 'Depth intensity factor [0.0 - 1.0]', '1.0')
+    .option('--depth-factor <factor>', 'Alias for --factor')
+    .option('--no-hsr', 'Disable Hidden Surface Removal (HSR)')
     .option('-m, --mode <mode>', 'Convergence mode: parallel or cross', 'parallel')
     .option('--dot-scale <scale>', 'Pixel block dimension of dots (SIRDS only)', '1')
     .option('--shape <shape>', 'Procedural depth shape (sphere, box, slanted)', 'sphere')
     .action(async (opts) => {
       try {
-        const depthFactor = Math.max(0, Math.min(1, parseFloat(opts.depthFactor) || 1.0));
+        const rawFactor = opts.factor ?? opts.depthFactor;
+        const depthFactor = Math.max(0, Math.min(1, parseFloat(rawFactor) || 1.0));
+        const hsr = opts.hsr !== false;
         const dotScale = Math.max(1, parseInt(opts.dotScale, 10) || 1);
         const mode: ConvergenceMode = opts.mode === 'cross' ? 'cross' : 'parallel';
         const separation = opts.separation ? parseInt(opts.separation, 10) : undefined;
@@ -121,6 +125,7 @@ async function main() {
             convergenceMode: mode,
             patternSeparation: separation,
             depthFactor,
+            hsr,
           });
 
           await sharp(result.data, {
@@ -140,7 +145,7 @@ async function main() {
           // SIRDS Mode
           const effectiveSeparation = separation ?? Math.round(depthMap.width / 8);
           console.log(
-            `Rendering SIRDS (${depthMap.width}x${depthMap.height}, mode: ${mode}, separation: ${effectiveSeparation}px)...`
+            `Rendering SIRDS (${depthMap.width}x${depthMap.height}, mode: ${mode}, separation: ${effectiveSeparation}px, hsr: ${hsr})...`
           );
 
           const sirds = generateSirds(depthMap, {
@@ -148,6 +153,7 @@ async function main() {
             patternSeparation: separation,
             depthFactor,
             dotScale,
+            hsr,
           });
 
           await sharp(sirds.data, {
