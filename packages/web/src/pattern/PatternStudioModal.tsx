@@ -28,7 +28,6 @@ export interface PatternStudioModalProps {
   patternSeparation: number;
   initialRecipe?: PatternRecipe;
   initialVerticalPeriod?: number;
-  activeDepthMap?: DepthMap | null;
   depthMap?: DepthMap | null;
   convergenceMode?: ConvergenceMode;
   depthFactor?: number;
@@ -112,6 +111,67 @@ export function calculateTestbedSeparation(
 }
 
 /**
+ * Blits an RgbaImage buffer to a 2D canvas rendering context.
+ */
+export function putRgbaToContext(
+  ctx: CanvasRenderingContext2D,
+  image: RgbaImage
+): void {
+  const imgData = ctx.createImageData(image.width, image.height);
+  imgData.data.set(image.data);
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/**
+ * Proportionally scales recipe feature dimensions (cellSize, dotRadius, stripeWidth)
+ * so that visual pattern density in the mini-stereogram testbed matches full-scale stereograms.
+ */
+export function scaleRecipeForTestbed(
+  recipe: PatternRecipe,
+  scale: number
+): PatternRecipe {
+  switch (recipe.type) {
+    case 'checker': {
+      const baseCell = recipe.cellSize ?? recipe.scale;
+      if (baseCell === undefined) return recipe;
+      const scaledCell = Math.max(2, Math.round(baseCell * scale));
+      return {
+        ...recipe,
+        cellSize: scaledCell,
+        ...(recipe.scale !== undefined ? { scale: scaledCell } : {}),
+      };
+    }
+    case 'stripes': {
+      const baseWidth = recipe.stripeWidth ?? recipe.scale ?? recipe.cellSize;
+      if (baseWidth === undefined) return recipe;
+      const scaledWidth = Math.max(1, Math.round(baseWidth * scale));
+      return {
+        ...recipe,
+        stripeWidth: scaledWidth,
+        ...(recipe.scale !== undefined ? { scale: scaledWidth } : {}),
+        ...(recipe.cellSize !== undefined ? { cellSize: scaledWidth } : {}),
+      };
+    }
+    case 'mosaic': {
+      const baseCell = recipe.cellSize ?? recipe.scale;
+      const scaledCell = baseCell !== undefined ? Math.max(2, Math.round(baseCell * scale)) : undefined;
+      const baseRadius = recipe.dotRadius !== undefined
+        ? recipe.dotRadius
+        : (baseCell !== undefined ? Math.round(baseCell * 0.35) : undefined);
+      const scaledRadius = baseRadius !== undefined ? Math.max(1, Math.round(baseRadius * scale)) : undefined;
+
+      return {
+        ...recipe,
+        ...(scaledCell !== undefined ? { cellSize: scaledCell, ...(recipe.scale !== undefined ? { scale: scaledCell } : {}) } : {}),
+        ...(scaledRadius !== undefined ? { dotRadius: scaledRadius } : {}),
+      };
+    }
+    default:
+      return recipe;
+  }
+}
+
+/**
  * Dynamically computes a live autostereogram for the 240×160 testbed.
  */
 export function generateTestbedStereogramImage(
@@ -140,11 +200,14 @@ export function generateTestbedStereogramImage(
     Math.min(TESTBED_HEIGHT, Math.round(verticalPeriod * scale))
   );
 
+  // Scale feature size parameters proportionally so testbed pattern density matches full-size stereogram
+  const scaledRecipe = scaleRecipeForTestbed(recipe, scale);
+
   // Synthesize pattern tile dynamically synchronized to testbed separation (ADR 0003)
   const patternTile = generatePatternTile(
     testbedSeparation,
     testbedVerticalPeriod,
-    recipe
+    scaledRecipe
   );
 
   const stereogram = generateTexturedStereogram(depthMap, patternTile, {
@@ -188,7 +251,7 @@ export function hexToRgba(hex: string, alpha = 255): RgbaColor {
 }
 
 /**
- * Canonical default recipe configurations for each procedural generator.
+ * Canonical default pattern recipes for each procedural generator.
  */
 export const DEFAULT_RECIPES: Record<PatternGeneratorType, PatternRecipe> = {
   perlin: {
@@ -278,7 +341,6 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
   patternSeparation,
   initialRecipe,
   initialVerticalPeriod,
-  activeDepthMap,
   depthMap,
   convergenceMode = 'parallel',
   depthFactor = 0.85,
@@ -455,9 +517,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const imgData = ctx.createImageData(tile.width, tile.height);
-    imgData.data.set(tile.data);
-    ctx.putImageData(imgData, 0, 0);
+    putRgbaToContext(ctx, tile);
   }, [tile]);
 
   // Render 3×3 repetition grid canvas
@@ -508,7 +568,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
 
   // Testbed Depth Map resolution
   const benchmarkDepthMap = useMemo(() => getBenchmarkSphereDepthMap(), []);
-  const activeProjectDepth = activeDepthMap ?? depthMap ?? null;
+  const activeProjectDepth = depthMap ?? null;
   const resampledProjectDepthMap = useMemo(() => {
     if (!activeProjectDepth) return null;
     return resampleDepthMap(activeProjectDepth, TESTBED_WIDTH, TESTBED_HEIGHT);
@@ -548,9 +608,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const imgData = ctx.createImageData(stereogram.width, stereogram.height);
-        imgData.data.set(stereogram.data);
-        ctx.putImageData(imgData, 0, 0);
+        putRgbaToContext(ctx, stereogram);
       } catch (err) {
         console.error('Failed to render 3D fusibility testbed stereogram:', err);
       }
@@ -679,9 +737,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
         const ctx = offscreen.getContext('2d');
         if (ctx) {
           const tileImg = generatePatternTile(tileWidth, tileHeight, currentRecipe);
-          const imgData = ctx.createImageData(tileWidth, tileHeight);
-          imgData.data.set(tileImg.data);
-          ctx.putImageData(imgData, 0, 0);
+          putRgbaToContext(ctx, tileImg);
           dataUrl = offscreen.toDataURL('image/png');
         }
       }
@@ -847,13 +903,13 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
             >
               {/* PERLIN NOISE CONTROLS */}
               {activeType === 'perlin' && (() => {
-                const p = currentRecipe as { type: 'perlin' } & PerlinTextureOptions;
+                const perlinRecipe = currentRecipe as { type: 'perlin' } & PerlinTextureOptions;
                 return (
                   <>
                     <div className="control-group">
                       <label htmlFor="perlin-scale-range">
                         <span>Feature Frequency / Scale</span>
-                        <span className="val">{p.scale ?? 4}</span>
+                        <span className="val">{perlinRecipe.scale ?? 4}</span>
                       </label>
                       <input
                         id="perlin-scale-range"
@@ -861,7 +917,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="2"
                         max="16"
                         step="1"
-                        value={p.scale ?? 4}
+                        value={perlinRecipe.scale ?? 4}
                         onChange={(e) => updateRecipe({ scale: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -869,7 +925,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                     <div className="control-group">
                       <label htmlFor="perlin-octaves-range">
                         <span>Harmonic Octaves</span>
-                        <span className="val">{p.octaves ?? 3}</span>
+                        <span className="val">{perlinRecipe.octaves ?? 3}</span>
                       </label>
                       <input
                         id="perlin-octaves-range"
@@ -877,7 +933,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="1"
                         max="6"
                         step="1"
-                        value={p.octaves ?? 3}
+                        value={perlinRecipe.octaves ?? 3}
                         onChange={(e) => updateRecipe({ octaves: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -889,10 +945,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="perlin-color-a"
                             type="color"
-                            value={rgbaToHex(p.colorA, '#38bdf8')}
+                            value={rgbaToHex(perlinRecipe.colorA, '#38bdf8')}
                             onChange={(e) => updateRecipe({ colorA: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(p.colorA, '#38bdf8')}</span>
+                          <span className="color-hex-label">{rgbaToHex(perlinRecipe.colorA, '#38bdf8')}</span>
                         </div>
                       </div>
 
@@ -902,10 +958,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="perlin-color-b"
                             type="color"
-                            value={rgbaToHex(p.colorB, '#0f172a')}
+                            value={rgbaToHex(perlinRecipe.colorB, '#0f172a')}
                             onChange={(e) => updateRecipe({ colorB: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(p.colorB, '#0f172a')}</span>
+                          <span className="color-hex-label">{rgbaToHex(perlinRecipe.colorB, '#0f172a')}</span>
                         </div>
                       </div>
                     </div>
@@ -915,13 +971,13 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
 
               {/* VORONOI CELLULAR CONTROLS */}
               {activeType === 'voronoi' && (() => {
-                const v = currentRecipe as { type: 'voronoi' } & VoronoiTextureOptions;
+                const voronoiRecipe = currentRecipe as { type: 'voronoi' } & VoronoiTextureOptions;
                 return (
                   <>
                     <div className="control-group">
                       <label htmlFor="voronoi-cells-range">
                         <span>Cell Count (Seed Centers)</span>
-                        <span className="val">{v.numCells ?? 16}</span>
+                        <span className="val">{voronoiRecipe.numCells ?? 16}</span>
                       </label>
                       <input
                         id="voronoi-cells-range"
@@ -929,7 +985,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="4"
                         max="64"
                         step="1"
-                        value={v.numCells ?? 16}
+                        value={voronoiRecipe.numCells ?? 16}
                         onChange={(e) => updateRecipe({ numCells: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -941,10 +997,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="voronoi-color-a"
                             type="color"
-                            value={rgbaToHex(v.colorA, '#ec4899')}
+                            value={rgbaToHex(voronoiRecipe.colorA, '#ec4899')}
                             onChange={(e) => updateRecipe({ colorA: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(v.colorA, '#ec4899')}</span>
+                          <span className="color-hex-label">{rgbaToHex(voronoiRecipe.colorA, '#ec4899')}</span>
                         </div>
                       </div>
 
@@ -954,10 +1010,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="voronoi-color-b"
                             type="color"
-                            value={rgbaToHex(v.colorB, '#1e293b')}
+                            value={rgbaToHex(voronoiRecipe.colorB, '#1e293b')}
                             onChange={(e) => updateRecipe({ colorB: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(v.colorB, '#1e293b')}</span>
+                          <span className="color-hex-label">{rgbaToHex(voronoiRecipe.colorB, '#1e293b')}</span>
                         </div>
                       </div>
                     </div>
@@ -967,13 +1023,13 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
 
               {/* CHECKERBOARD CONTROLS */}
               {activeType === 'checker' && (() => {
-                const c = currentRecipe as { type: 'checker' } & CheckerTextureOptions;
+                const checkerRecipe = currentRecipe as { type: 'checker' } & CheckerTextureOptions;
                 return (
                   <>
                     <div className="control-group">
                       <label htmlFor="checker-cell-range">
                         <span>Cell Size (Pixels)</span>
-                        <span className="val">{c.cellSize ?? 10}px</span>
+                        <span className="val">{checkerRecipe.cellSize ?? 10}px</span>
                       </label>
                       <input
                         id="checker-cell-range"
@@ -981,7 +1037,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="2"
                         max="40"
                         step="1"
-                        value={c.cellSize ?? 10}
+                        value={checkerRecipe.cellSize ?? 10}
                         onChange={(e) => updateRecipe({ cellSize: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -993,10 +1049,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="checker-color-a"
                             type="color"
-                            value={rgbaToHex(c.colorA, '#38bdf8')}
+                            value={rgbaToHex(checkerRecipe.colorA, '#38bdf8')}
                             onChange={(e) => updateRecipe({ colorA: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(c.colorA, '#38bdf8')}</span>
+                          <span className="color-hex-label">{rgbaToHex(checkerRecipe.colorA, '#38bdf8')}</span>
                         </div>
                       </div>
 
@@ -1006,10 +1062,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="checker-color-b"
                             type="color"
-                            value={rgbaToHex(c.colorB, '#1e293b')}
+                            value={rgbaToHex(checkerRecipe.colorB, '#1e293b')}
                             onChange={(e) => updateRecipe({ colorB: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(c.colorB, '#1e293b')}</span>
+                          <span className="color-hex-label">{rgbaToHex(checkerRecipe.colorB, '#1e293b')}</span>
                         </div>
                       </div>
                     </div>
@@ -1019,13 +1075,15 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
 
               {/* STRIPES CONTROLS */}
               {activeType === 'stripes' && (() => {
-                const s = currentRecipe as { type: 'stripes' } & StripesTextureOptions;
+                const stripesRecipe = currentRecipe as { type: 'stripes' } & StripesTextureOptions;
+                const effectiveColorA = stripesRecipe.colorA ?? stripesRecipe.colors?.[0] ?? [239, 68, 68, 255];
+                const effectiveColorB = stripesRecipe.colorB ?? stripesRecipe.colors?.[1] ?? [59, 130, 246, 255];
                 return (
                   <>
                     <div className="control-group">
                       <label htmlFor="stripes-width-range">
                         <span>Stripe Width</span>
-                        <span className="val">{s.stripeWidth ?? 10}px</span>
+                        <span className="val">{stripesRecipe.stripeWidth ?? 10}px</span>
                       </label>
                       <input
                         id="stripes-width-range"
@@ -1033,7 +1091,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="2"
                         max="40"
                         step="1"
-                        value={s.stripeWidth ?? 10}
+                        value={stripesRecipe.stripeWidth ?? 10}
                         onChange={(e) => updateRecipe({ stripeWidth: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -1042,7 +1100,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                       <label htmlFor="stripes-direction-select">Orientation</label>
                       <select
                         id="stripes-direction-select"
-                        value={s.direction ?? 'vertical'}
+                        value={stripesRecipe.direction ?? 'vertical'}
                         onChange={(e) =>
                           updateRecipe({
                             direction: e.target.value as 'vertical' | 'horizontal',
@@ -1061,10 +1119,16 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="stripes-color-a"
                             type="color"
-                            value={rgbaToHex(s.colorA, '#ef4444')}
-                            onChange={(e) => updateRecipe({ colorA: hexToRgba(e.target.value) })}
+                            value={rgbaToHex(effectiveColorA, '#ef4444')}
+                            onChange={(e) => {
+                              const newColorA = hexToRgba(e.target.value);
+                              updateRecipe({
+                                colorA: newColorA,
+                                colors: [newColorA, effectiveColorB],
+                              });
+                            }}
                           />
-                          <span className="color-hex-label">{rgbaToHex(s.colorA, '#ef4444')}</span>
+                          <span className="color-hex-label">{rgbaToHex(effectiveColorA, '#ef4444')}</span>
                         </div>
                       </div>
 
@@ -1074,10 +1138,16 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="stripes-color-b"
                             type="color"
-                            value={rgbaToHex(s.colorB, '#3b82f6')}
-                            onChange={(e) => updateRecipe({ colorB: hexToRgba(e.target.value) })}
+                            value={rgbaToHex(effectiveColorB, '#3b82f6')}
+                            onChange={(e) => {
+                              const newColorB = hexToRgba(e.target.value);
+                              updateRecipe({
+                                colorB: newColorB,
+                                colors: [effectiveColorA, newColorB],
+                              });
+                            }}
                           />
-                          <span className="color-hex-label">{rgbaToHex(s.colorB, '#3b82f6')}</span>
+                          <span className="color-hex-label">{rgbaToHex(effectiveColorB, '#3b82f6')}</span>
                         </div>
                       </div>
                     </div>
@@ -1087,13 +1157,13 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
 
               {/* MOSAIC CONTROLS */}
               {activeType === 'mosaic' && (() => {
-                const m = currentRecipe as { type: 'mosaic' } & MosaicTextureOptions;
+                const mosaicRecipe = currentRecipe as { type: 'mosaic' } & MosaicTextureOptions;
                 return (
                   <>
                     <div className="control-group">
                       <label htmlFor="mosaic-cell-range">
                         <span>Grid Cell Dimension</span>
-                        <span className="val">{m.cellSize ?? 20}px</span>
+                        <span className="val">{mosaicRecipe.cellSize ?? 20}px</span>
                       </label>
                       <input
                         id="mosaic-cell-range"
@@ -1101,7 +1171,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="4"
                         max="60"
                         step="1"
-                        value={m.cellSize ?? 20}
+                        value={mosaicRecipe.cellSize ?? 20}
                         onChange={(e) => updateRecipe({ cellSize: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -1109,7 +1179,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                     <div className="control-group">
                       <label htmlFor="mosaic-radius-range">
                         <span>Dot Radius</span>
-                        <span className="val">{m.dotRadius ?? 7}px</span>
+                        <span className="val">{mosaicRecipe.dotRadius ?? 7}px</span>
                       </label>
                       <input
                         id="mosaic-radius-range"
@@ -1117,7 +1187,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                         min="1"
                         max="30"
                         step="1"
-                        value={m.dotRadius ?? 7}
+                        value={mosaicRecipe.dotRadius ?? 7}
                         onChange={(e) => updateRecipe({ dotRadius: parseInt(e.target.value, 10) })}
                       />
                     </div>
@@ -1129,10 +1199,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="mosaic-color-a"
                             type="color"
-                            value={rgbaToHex(m.colorA, '#ec4899')}
+                            value={rgbaToHex(mosaicRecipe.colorA, '#ec4899')}
                             onChange={(e) => updateRecipe({ colorA: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(m.colorA, '#ec4899')}</span>
+                          <span className="color-hex-label">{rgbaToHex(mosaicRecipe.colorA, '#ec4899')}</span>
                         </div>
                       </div>
 
@@ -1142,10 +1212,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                           <input
                             id="mosaic-color-b"
                             type="color"
-                            value={rgbaToHex(m.colorB, '#0f172a')}
+                            value={rgbaToHex(mosaicRecipe.colorB, '#0f172a')}
                             onChange={(e) => updateRecipe({ colorB: hexToRgba(e.target.value) })}
                           />
-                          <span className="color-hex-label">{rgbaToHex(m.colorB, '#0f172a')}</span>
+                          <span className="color-hex-label">{rgbaToHex(mosaicRecipe.colorB, '#0f172a')}</span>
                         </div>
                       </div>
                     </div>
@@ -1262,7 +1332,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                   type="button"
                   className="btn-secondary btn-sm"
                   onClick={handleExportJson}
-                  title="Export active recipe configuration to JSON"
+                  title="Export active pattern recipe to JSON"
                 >
                   📤 Export JSON
                 </button>
@@ -1377,7 +1447,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                 onMouseUp={handleGridMouseUp}
                 onMouseLeave={handleGridMouseUp}
                 style={{ cursor: isGridDragging ? 'grabbing' : 'grab' }}
-                title="Click and drag to pan across the 3x3 tiling grid"
+                title="Click and drag to pan across the 3x3 repetition grid"
               >
                 <div
                   className="grid-transform-layer"

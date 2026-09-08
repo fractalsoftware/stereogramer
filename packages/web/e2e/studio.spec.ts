@@ -835,7 +835,7 @@ test.describe('Stereogramer Web Studio E2E', () => {
       // Verify error banner is rendered
       const errorBanner = page.locator('#pattern-studio-error');
       await expect(errorBanner).toBeVisible();
-      await expect(errorBanner).toContainText('Invalid recipe configuration');
+      await expect(errorBanner).toContainText('Invalid pattern recipe');
 
       // Close modal to cleanup
       await page.click('#pattern-studio-cancel-btn');

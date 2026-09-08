@@ -268,6 +268,68 @@ describe('Palettes and Procedural Textures', () => {
       expect(tile.data[rightIdx]).toBe(99);
     });
 
+    it('preserves toroidal boundary continuity for Checkerboard tiles across arbitrary non-multiple dimensions (70px, 95px)', () => {
+      for (const [w, h] of [[70, 70], [95, 70], [70, 95]]) {
+        const tile = generatePatternTile(w, h, { type: 'checker', cellSize: 10 });
+        for (let y = 0; y < h; y++) {
+          const leftIdx = (y * w + 0) * 4;
+          const rightIdx = (y * w + (w - 1)) * 4;
+          expect(tile.data[leftIdx]).not.toBe(tile.data[rightIdx]);
+        }
+        for (let x = 0; x < w; x++) {
+          const topIdx = (0 * w + x) * 4;
+          const bottomIdx = ((h - 1) * w + x) * 4;
+          expect(tile.data[topIdx]).not.toBe(tile.data[bottomIdx]);
+        }
+      }
+    });
+
+    it('preserves toroidal boundary continuity for Stripes across arbitrary non-multiple dimensions (70px, 95px)', () => {
+      for (const [w, h] of [[70, 50], [95, 60]]) {
+        // Vertical stripes: columns must be uniform vertically, with integer non-truncated stripes across w
+        const tileVert = generatePatternTile(w, h, { type: 'stripes', stripeWidth: 10, direction: 'vertical' });
+        for (let x = 0; x < w; x++) {
+          const topIdx = (0 * w + x) * 4;
+          const bottomIdx = ((h - 1) * w + x) * 4;
+          expect(tileVert.data[topIdx]).toBe(tileVert.data[bottomIdx]);
+          expect(tileVert.data[topIdx + 1]).toBe(tileVert.data[bottomIdx + 1]);
+          expect(tileVert.data[topIdx + 2]).toBe(tileVert.data[bottomIdx + 2]);
+        }
+
+        // Horizontal stripes: rows must be uniform horizontally, with integer non-truncated stripes across h
+        const tileHoriz = generatePatternTile(w, h, { type: 'stripes', stripeWidth: 10, direction: 'horizontal' });
+        for (let y = 0; y < h; y++) {
+          const leftIdx = (y * w + 0) * 4;
+          const rightIdx = (y * w + (w - 1)) * 4;
+          expect(tileHoriz.data[leftIdx]).toBe(tileHoriz.data[rightIdx]);
+          expect(tileHoriz.data[leftIdx + 1]).toBe(tileHoriz.data[rightIdx + 1]);
+          expect(tileHoriz.data[leftIdx + 2]).toBe(tileHoriz.data[rightIdx + 2]);
+        }
+      }
+    });
+
+    it('handles stripes color precedence when colorA/colorB or colors are provided', () => {
+      const red: [number, number, number, number] = [255, 0, 0, 255];
+      const blue: [number, number, number, number] = [0, 0, 255, 255];
+      const twoTone = generateStripesTexture(40, 20, { colorA: red, colorB: blue, stripeWidth: 10 });
+      expect(twoTone.data[0]).toBe(255); // red primary stripe
+      expect(twoTone.data[40]).toBe(0);   // blue secondary stripe
+
+      const green: [number, number, number, number] = [0, 255, 0, 255];
+      const yellow: [number, number, number, number] = [255, 255, 0, 255];
+      const explicitColors = generateStripesTexture(40, 20, {
+        colors: [green, yellow],
+        colorA: red,
+        colorB: blue,
+        stripeWidth: 10,
+      });
+      // options.colors takes precedence over colorA / colorB
+      expect(explicitColors.data[0]).toBe(0);     // green channel 0
+      expect(explicitColors.data[1]).toBe(255);   // green channel 1
+      expect(explicitColors.data[40]).toBe(255);  // yellow channel 0
+      expect(explicitColors.data[41]).toBe(255);  // yellow channel 1
+    });
+
     it('preserves toroidal boundary continuity for Dot Mosaic', () => {
       const w = 80;
       const h = 80;

@@ -1707,7 +1707,6 @@ export const App: React.FC = () => {
         patternSeparation={separation}
         initialRecipe={activePatternRecipe ?? TEXTURE_PRESETS.find((p) => p.id === selectedTexturePreset)?.recipe}
         initialVerticalPeriod={verticalPeriod}
-        activeDepthMap={resolvedDepthMap}
         depthMap={resolvedDepthMap}
         convergenceMode={convergenceMode}
         depthFactor={depthFactor}

@@ -3,6 +3,8 @@ import {
   DEFAULT_RECIPES,
   rgbaToHex,
   hexToRgba,
+  putRgbaToContext,
+  scaleRecipeForTestbed,
 } from './PatternStudioModal.js';
 import {
   generatePatternTile,
@@ -477,6 +479,98 @@ describe('PatternStudioModal & Procedural Synthesis Engine', () => {
           expect(result.stereogram.height).toBe(TESTBED_HEIGHT);
           expect(result.stereogram.data.length).toBe(TESTBED_WIDTH * TESTBED_HEIGHT * 4);
         }
+      });
+    });
+
+    describe('putRgbaToContext', () => {
+      it('creates an ImageData matching image dimensions and calls putImageData at (0, 0)', () => {
+        let createdWidth = 0;
+        let createdHeight = 0;
+        let putCall: { imgData: any; x: number; y: number } | null = null;
+
+        const mockCtx = {
+          createImageData: (w: number, h: number) => {
+            createdWidth = w;
+            createdHeight = h;
+            return {
+              width: w,
+              height: h,
+              data: new Uint8ClampedArray(w * h * 4),
+            };
+          },
+          putImageData: (imgData: any, x: number, y: number) => {
+            putCall = { imgData, x, y };
+          },
+        } as unknown as CanvasRenderingContext2D;
+
+        const sampleImage = {
+          width: 10,
+          height: 8,
+          data: new Uint8ClampedArray(10 * 8 * 4).fill(255),
+        };
+
+        putRgbaToContext(mockCtx, sampleImage);
+
+        expect(createdWidth).toBe(10);
+        expect(createdHeight).toBe(8);
+        expect(putCall).not.toBeNull();
+        expect(putCall!.x).toBe(0);
+        expect(putCall!.y).toBe(0);
+        expect(putCall!.imgData.data[0]).toBe(255);
+      });
+    });
+
+    describe('scaleRecipeForTestbed', () => {
+      const scale = 0.375; // 240 / 640
+
+      it('scales checkerboard cellSize proportionally', () => {
+        const recipe: PatternRecipe = {
+          type: 'checker',
+          cellSize: 20,
+          colorA: [0, 0, 0, 255],
+          colorB: [255, 255, 255, 255],
+        };
+        const scaled = scaleRecipeForTestbed(recipe, scale);
+        expect(scaled.type).toBe('checker');
+        if (scaled.type === 'checker') {
+          expect(scaled.cellSize).toBe(Math.max(2, Math.round(20 * scale)));
+        }
+      });
+
+      it('scales stripes stripeWidth proportionally', () => {
+        const recipe: PatternRecipe = {
+          type: 'stripes',
+          stripeWidth: 16,
+          direction: 'vertical',
+        };
+        const scaled = scaleRecipeForTestbed(recipe, scale);
+        expect(scaled.type).toBe('stripes');
+        if (scaled.type === 'stripes') {
+          expect(scaled.stripeWidth).toBe(Math.max(1, Math.round(16 * scale)));
+        }
+      });
+
+      it('scales mosaic cellSize and dotRadius proportionally', () => {
+        const recipe: PatternRecipe = {
+          type: 'mosaic',
+          cellSize: 24,
+          dotRadius: 8,
+        };
+        const scaled = scaleRecipeForTestbed(recipe, scale);
+        expect(scaled.type).toBe('mosaic');
+        if (scaled.type === 'mosaic') {
+          expect(scaled.cellSize).toBe(Math.max(2, Math.round(24 * scale)));
+          expect(scaled.dotRadius).toBe(Math.max(1, Math.round(8 * scale)));
+        }
+      });
+
+      it('returns unmodified recipe for perlin and voronoi', () => {
+        const perlin: PatternRecipe = {
+          type: 'perlin',
+          scale: 4,
+          octaves: 3,
+        };
+        expect(scaleRecipeForTestbed(perlin, scale)).toEqual(perlin);
       });
     });
   });

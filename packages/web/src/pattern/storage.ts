@@ -69,12 +69,6 @@ export function isValidPatternRecipe(obj: unknown): obj is PatternRecipe {
   if (candidate.colorB !== undefined && !isRgbaColor(candidate.colorB)) {
     return false;
   }
-  if ((candidate as any).color1 !== undefined && !isRgbaColor((candidate as any).color1)) {
-    return false;
-  }
-  if ((candidate as any).color2 !== undefined && !isRgbaColor((candidate as any).color2)) {
-    return false;
-  }
 
   switch (candidate.type as PatternGeneratorType) {
     case 'perlin':
@@ -90,22 +84,7 @@ export function isValidPatternRecipe(obj: unknown): obj is PatternRecipe {
       if (candidate.numCells !== undefined && (typeof candidate.numCells !== 'number' || isNaN(candidate.numCells) || candidate.numCells <= 0 || candidate.numCells > 500)) {
         return false;
       }
-      if ((candidate as any).count !== undefined && (typeof (candidate as any).count !== 'number' || isNaN((candidate as any).count) || (candidate as any).count <= 0 || (candidate as any).count > 500)) {
-        return false;
-      }
-      if ((candidate as any).edgeThreshold !== undefined && (typeof (candidate as any).edgeThreshold !== 'number' || isNaN((candidate as any).edgeThreshold) || (candidate as any).edgeThreshold < 0)) {
-        return false;
-      }
-      if ((candidate as any).palette !== undefined && (!Array.isArray((candidate as any).palette) || !(candidate as any).palette.every(isRgbaColor))) {
-        return false;
-      }
-      if (candidate.metric !== undefined && !['euclidean', 'manhattan', 'chebyshev'].includes(candidate.metric as string)) {
-        return false;
-      }
-      if (candidate.borderWidth !== undefined && (typeof candidate.borderWidth !== 'number' || isNaN(candidate.borderWidth) || candidate.borderWidth < 0)) {
-        return false;
-      }
-      if (candidate.borderColor !== undefined && !isRgbaColor(candidate.borderColor)) {
+      if (candidate.count !== undefined && (typeof candidate.count !== 'number' || isNaN(candidate.count) || candidate.count <= 0 || candidate.count > 500)) {
         return false;
       }
       return true;
@@ -114,10 +93,19 @@ export function isValidPatternRecipe(obj: unknown): obj is PatternRecipe {
       if (candidate.cellSize !== undefined && (typeof candidate.cellSize !== 'number' || isNaN(candidate.cellSize) || candidate.cellSize <= 0)) {
         return false;
       }
+      if (candidate.scale !== undefined && (typeof candidate.scale !== 'number' || isNaN(candidate.scale) || candidate.scale <= 0)) {
+        return false;
+      }
       return true;
 
     case 'stripes':
       if (candidate.stripeWidth !== undefined && (typeof candidate.stripeWidth !== 'number' || isNaN(candidate.stripeWidth) || candidate.stripeWidth <= 0)) {
+        return false;
+      }
+      if (candidate.scale !== undefined && (typeof candidate.scale !== 'number' || isNaN(candidate.scale) || candidate.scale <= 0)) {
+        return false;
+      }
+      if (candidate.cellSize !== undefined && (typeof candidate.cellSize !== 'number' || isNaN(candidate.cellSize) || candidate.cellSize <= 0)) {
         return false;
       }
       if (candidate.direction !== undefined && !['horizontal', 'vertical'].includes(candidate.direction as string)) {
@@ -128,27 +116,26 @@ export function isValidPatternRecipe(obj: unknown): obj is PatternRecipe {
       }
       return true;
 
-    case 'mosaic':
+    case 'mosaic': {
+      const cell = candidate.cellSize ?? candidate.scale;
       if (candidate.cellSize !== undefined && (typeof candidate.cellSize !== 'number' || isNaN(candidate.cellSize) || candidate.cellSize <= 0)) {
+        return false;
+      }
+      if (candidate.scale !== undefined && (typeof candidate.scale !== 'number' || isNaN(candidate.scale) || candidate.scale <= 0)) {
         return false;
       }
       if (candidate.dotRadius !== undefined && (typeof candidate.dotRadius !== 'number' || isNaN(candidate.dotRadius) || candidate.dotRadius <= 0)) {
         return false;
       }
       if (
-        candidate.cellSize !== undefined &&
-        candidate.dotRadius !== undefined &&
-        candidate.dotRadius > candidate.cellSize
+        typeof cell === 'number' &&
+        typeof candidate.dotRadius === 'number' &&
+        candidate.dotRadius > cell
       ) {
         return false;
       }
-      if (candidate.dotColor !== undefined && !isRgbaColor(candidate.dotColor)) {
-        return false;
-      }
-      if (candidate.bgColor !== undefined && !isRgbaColor(candidate.bgColor)) {
-        return false;
-      }
       return true;
+    }
 
     default:
       return false;
@@ -319,7 +306,7 @@ export function parseAndValidateRecipeJson(jsonString: string): ExportedPatternR
   // Case 1: Wrapped bundle with `{ name, verticalPeriod, recipe }`
   if ('recipe' in obj) {
     if (!isValidPatternRecipe(obj.recipe)) {
-      throw new Error('Invalid recipe configuration: schema validation failed');
+      throw new Error('Invalid pattern recipe: schema validation failed');
     }
     const name = typeof obj.name === 'string' && obj.name.trim()
       ? obj.name.trim()
@@ -344,5 +331,5 @@ export function parseAndValidateRecipeJson(jsonString: string): ExportedPatternR
     };
   }
 
-  throw new Error('Invalid recipe configuration: JSON object does not conform to PatternRecipe schema');
+  throw new Error('Invalid pattern recipe: JSON object does not conform to PatternRecipe schema');
 }

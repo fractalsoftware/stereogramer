@@ -34,7 +34,7 @@ function smoothstep(t: number): number {
 }
 
 /**
- * Computes single-octave periodic (seamlessly tileable) 2D gradient noise in [0, 1].
+ * Computes single-octave toroidally periodic 2D gradient noise in [0, 1].
  */
 function periodicNoise2D(
   x: number,
@@ -79,7 +79,7 @@ function periodicNoise2D(
 }
 
 /**
- * Generates a seamlessly tileable procedural Perlin noise texture.
+ * Generates a toroidally periodic procedural Perlin noise texture with toroidal seamlessness.
  */
 export function generatePerlinTexture(
   width: number,
@@ -125,7 +125,7 @@ export function generatePerlinTexture(
 }
 
 /**
- * Generates a seamlessly tileable procedural Voronoi cellular texture.
+ * Generates a toroidally periodic procedural Voronoi cellular texture with toroidal seamlessness.
  */
 export function generateVoronoiTexture(
   width: number,
@@ -190,44 +190,62 @@ export function generateVoronoiTexture(
 }
 
 /**
- * Generates a procedural checkerboard texture tile.
+ * Generates a procedural checkerboard texture tile with toroidal seamlessness.
  */
 export function generateCheckerboardTexture(
   width: number,
   height: number,
   cellSizeOrOptions: number | CheckerTextureOptions = 10,
-  colorA?: RgbaColor,
-  colorB?: RgbaColor
+  overrideColorA?: RgbaColor,
+  overrideColorB?: RgbaColor
 ): RgbaImage {
   const w = Math.max(1, Math.round(width));
   const h = Math.max(1, Math.round(height));
 
   let cell = 10;
-  let cA: RgbaColor = [56, 189, 248, 255];
-  let cB: RgbaColor = [30, 41, 59, 255];
+  let colorA: RgbaColor = [56, 189, 248, 255];
+  let colorB: RgbaColor = [30, 41, 59, 255];
   let seed = 0;
 
   if (typeof cellSizeOrOptions === 'object' && cellSizeOrOptions !== null) {
     cell = Math.max(1, Math.round(cellSizeOrOptions.cellSize ?? cellSizeOrOptions.scale ?? 10));
-    cA = cellSizeOrOptions.colorA ?? cA;
-    cB = cellSizeOrOptions.colorB ?? cB;
+    colorA = cellSizeOrOptions.colorA ?? colorA;
+    colorB = cellSizeOrOptions.colorB ?? colorB;
     seed = Math.round(cellSizeOrOptions.seed ?? 0);
   } else if (typeof cellSizeOrOptions === 'number') {
     cell = Math.max(1, Math.round(cellSizeOrOptions));
-    cA = colorA ?? cA;
-    cB = colorB ?? cB;
+    colorA = overrideColorA ?? colorA;
+    colorB = overrideColorB ?? colorB;
+  }
+
+  // Integer cell counts across dimensions to guarantee toroidal seamlessness across boundaries.
+  // For alternating checkerboard continuity, an even number of cells is enforced when dimension >= 2.
+  let cols = Math.max(1, Math.round(w / cell));
+  if (cols > 1 && cols % 2 !== 0) {
+    cols += (w / cell >= cols) ? 1 : -1;
+  }
+  if (cols % 2 !== 0 && w >= 2) {
+    cols = (cols === 1) ? 2 : cols + 1;
+  }
+
+  let rows = Math.max(1, Math.round(h / cell));
+  if (rows > 1 && rows % 2 !== 0) {
+    rows += (h / cell >= rows) ? 1 : -1;
+  }
+  if (rows % 2 !== 0 && h >= 2) {
+    rows = (rows === 1) ? 2 : rows + 1;
   }
 
   const shift = seed !== 0 ? ((Math.floor(seed) % 2) + 2) % 2 : 0;
   const data = new Uint8ClampedArray(w * h * 4);
 
   for (let y = 0; y < h; y++) {
-    const cy = Math.floor(y / cell);
+    const cy = Math.min(rows - 1, Math.floor((y * rows) / h));
     const rowOffset = y * w * 4;
     for (let x = 0; x < w; x++) {
-      const cx = Math.floor(x / cell);
+      const cx = Math.min(cols - 1, Math.floor((x * cols) / w));
       const isA = (cx + cy + shift) % 2 === 0;
-      const color = isA ? cA : cB;
+      const color = isA ? colorA : colorB;
       const offset = rowOffset + x * 4;
 
       data[offset] = color[0];
@@ -241,7 +259,7 @@ export function generateCheckerboardTexture(
 }
 
 /**
- * Generates a procedural color stripes texture tile.
+ * Generates a procedural color stripes texture tile with toroidal seamlessness.
  */
 export function generateStripesTexture(
   width: number,
@@ -257,26 +275,39 @@ export function generateStripesTexture(
   const isVertical = options.direction !== 'horizontal';
   const seed = Math.round(options.seed ?? 0);
 
+  // Color precedence:
+  // 1. Explicit multi-color palette (options.colors) if non-empty
+  // 2. Two-tone pair [options.colorA, options.colorB] if either is defined
+  // 3. Fallback to DEFAULT_STRIPES_COLORS
   let colors: RgbaColor[];
   if (options.colors && options.colors.length > 0) {
     colors = options.colors;
-  } else if (options.colorA && options.colorB) {
-    colors = [options.colorA, options.colorB];
-  } else if (options.colorA) {
-    colors = [options.colorA, [15, 23, 42, 255]];
+  } else if (options.colorA || options.colorB) {
+    const defaultColorA: RgbaColor = [239, 68, 68, 255];
+    const defaultColorB: RgbaColor = [15, 23, 42, 255];
+    colors = [
+      options.colorA ?? defaultColorA,
+      options.colorB ?? defaultColorB,
+    ];
   } else {
     colors = DEFAULT_STRIPES_COLORS;
   }
 
   const numColors = colors.length;
   const shift = ((seed % numColors) + numColors) % numColors;
+  const dim = isVertical ? w : h;
+
+  // Fit an integer number of stripes across dim so stripes wrap toroidally without truncated half-stripes
+  const totalStripes = Math.max(1, Math.round(dim / stripeWidth));
+
   const data = new Uint8ClampedArray(w * h * 4);
 
   for (let y = 0; y < h; y++) {
     const rowOffset = y * w * 4;
     for (let x = 0; x < w; x++) {
       const coord = isVertical ? x : y;
-      const band = ((Math.floor(coord / stripeWidth) + shift) % numColors + numColors) % numColors;
+      const stripeIndex = Math.min(totalStripes - 1, Math.floor((coord * totalStripes) / dim));
+      const band = ((stripeIndex + shift) % numColors + numColors) % numColors;
       const color = colors[band]!;
       const offset = rowOffset + x * 4;
 
@@ -291,7 +322,7 @@ export function generateStripesTexture(
 }
 
 /**
- * Generates a seamlessly tileable procedural dot mosaic texture.
+ * Generates a toroidally periodic procedural dot mosaic texture with toroidal seamlessness.
  */
 export function generateMosaicTexture(
   width: number,

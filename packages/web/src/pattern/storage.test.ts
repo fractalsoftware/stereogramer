@@ -58,8 +58,8 @@ describe('Pattern Storage & JSON Validation', () => {
       expect(
         isValidPatternRecipe({
           type: 'perlin',
-          color1: [0, 0, 0, 255],
-          color2: [255, 255, 255, 255],
+          colorA: [0, 0, 0, 255],
+          colorB: [255, 255, 255, 255],
         })
       ).toBe(true);
     });
@@ -68,8 +68,8 @@ describe('Pattern Storage & JSON Validation', () => {
       expect(isValidPatternRecipe({ type: 'perlin', scale: -1 })).toBe(false);
       expect(isValidPatternRecipe({ type: 'perlin', octaves: 0 })).toBe(false);
       expect(isValidPatternRecipe({ type: 'perlin', octaves: 9 })).toBe(false);
-      expect(isValidPatternRecipe({ type: 'perlin', color1: [0, 0, 0] })).toBe(false); // 3-tuple
-      expect(isValidPatternRecipe({ type: 'perlin', color1: [0, 0, 0, 300] })).toBe(false); // > 255
+      expect(isValidPatternRecipe({ type: 'perlin', colorA: [0, 0, 0] })).toBe(false); // 3-tuple
+      expect(isValidPatternRecipe({ type: 'perlin', colorA: [0, 0, 0, 300] })).toBe(false); // > 255
     });
 
     it('accepts valid voronoi recipes', () => {
@@ -78,8 +78,8 @@ describe('Pattern Storage & JSON Validation', () => {
         isValidPatternRecipe({
           type: 'voronoi',
           numCells: 30,
-          edgeThreshold: 0.1,
-          palette: [[255, 0, 0, 255], [0, 255, 0, 255]],
+          colorA: [255, 0, 0, 255],
+          colorB: [0, 255, 0, 255],
         })
       ).toBe(true);
     });
@@ -87,8 +87,7 @@ describe('Pattern Storage & JSON Validation', () => {
     it('rejects invalid voronoi recipes', () => {
       expect(isValidPatternRecipe({ type: 'voronoi', numCells: 0 })).toBe(false);
       expect(isValidPatternRecipe({ type: 'voronoi', numCells: 600 })).toBe(false);
-      expect(isValidPatternRecipe({ type: 'voronoi', edgeThreshold: -0.1 })).toBe(false);
-      expect(isValidPatternRecipe({ type: 'voronoi', palette: ['red'] })).toBe(false);
+      expect(isValidPatternRecipe({ type: 'voronoi', colorA: [255, 0] })).toBe(false);
     });
 
     it('accepts valid checker recipes', () => {
@@ -97,8 +96,8 @@ describe('Pattern Storage & JSON Validation', () => {
         isValidPatternRecipe({
           type: 'checker',
           cellSize: 20,
-          color1: [10, 20, 30, 255],
-          color2: [40, 50, 60, 255],
+          colorA: [10, 20, 30, 255],
+          colorB: [40, 50, 60, 255],
         })
       ).toBe(true);
     });
@@ -134,8 +133,8 @@ describe('Pattern Storage & JSON Validation', () => {
           type: 'mosaic',
           cellSize: 24,
           dotRadius: 10,
-          bgColor: [0, 0, 0, 255],
-          dotColor: [255, 255, 255, 255],
+          colorA: [0, 0, 0, 255],
+          colorB: [255, 255, 255, 255],
         })
       ).toBe(true);
     });
@@ -331,14 +330,14 @@ describe('Pattern Storage & JSON Validation', () => {
           scale: -5, // invalid scale
         },
       });
-      expect(() => parseAndValidateRecipeJson(invalidRecipeJson)).toThrow(/Invalid recipe configuration/);
+      expect(() => parseAndValidateRecipeJson(invalidRecipeJson)).toThrow(/Invalid pattern recipe/);
     });
 
     it('throws when recipe property is completely missing in an unknown format', () => {
       const missingTypeJson = JSON.stringify({
         foo: 'bar',
       });
-      expect(() => parseAndValidateRecipeJson(missingTypeJson)).toThrow(/Invalid recipe configuration/);
+      expect(() => parseAndValidateRecipeJson(missingTypeJson)).toThrow(/Invalid pattern recipe/);
     });
   });
 });
