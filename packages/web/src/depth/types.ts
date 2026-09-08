@@ -64,6 +64,12 @@ export interface DepthEstimationOptions {
   synthetic?: boolean;
 
   /**
+   * When true, falls back to synthetic depth estimation if model loading or inference fails.
+   * Default: false.
+   */
+  syntheticFallback?: boolean;
+
+  /**
    * Target resolution for the intermediate model processing grid (e.g. 518).
    * Default: 518.
    */
@@ -74,6 +80,24 @@ export interface DepthEstimationOptions {
    * Default: 'hybrid'.
    */
   syntheticMode?: 'dome' | 'luminance' | 'hybrid';
+
+  /**
+   * Model repository ID for depth estimation.
+   * Default: 'onnx-community/Depth-Anything-V2-Small-ONNX'.
+   */
+  modelId?: string;
+
+  /**
+   * Quantization data type for the ONNX model (e.g. 'q8', 'fp32', 'q4').
+   * Default: 'q8'.
+   */
+  dtype?: string;
+
+  /**
+   * Execution provider backend ('auto', 'webgpu', 'wasm').
+   * Default: 'auto' (attempts WebGPU first with graceful fallback to WASM).
+   */
+  device?: 'auto' | 'webgpu' | 'wasm';
 }
 
 /**
@@ -93,7 +117,8 @@ export interface DepthEstimationProgress {
   id: string;
   type: typeof PROGRESS;
   stage: DepthEstimationStage;
-  progress: number; // 0.0 to 1.0
+  progress: number; // 0.0 to 1.0 or 0..100
+  percentage?: number; // 0 to 100
   message?: string;
 }
 
@@ -172,6 +197,14 @@ export interface SyntheticDepthOptions {
  */
 export interface DepthPipelineOptions extends DepthEstimationOptions {
   onProgress?: (stage: DepthEstimationStage, progress: number, message?: string) => void;
+  /**
+   * Pre-instantiated model pipeline to use instead of creating/caching a new one.
+   */
+  modelPipeline?: any;
+  /**
+   * Custom factory function for creating the pipeline (useful for testing and dependency injection).
+   */
+  pipelineFactory?: (task: string, model: string, options: any) => Promise<any>;
 }
 
 export type { DepthMap };
