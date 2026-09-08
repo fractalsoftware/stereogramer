@@ -587,6 +587,84 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(customCard).not.toBeVisible();
       await expect(page.locator('#texture-preset-select')).toBeVisible();
     });
+
+    test('renders instant 3D fusibility mini-stereogram testbed, toggles reference scene & guide dots, and reflects convergence mode', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // 2. Locate 3D Fusibility Testbed card and badges
+      const testbedCard = page.locator('.testbed-card');
+      await expect(testbedCard).toBeVisible();
+      await expect(page.locator('#testbed-fusibility-badge')).toHaveText('Binocular Fusibility');
+      await expect(page.locator('#testbed-dimension-badge')).toHaveText('240 × 160 px');
+      await expect(page.locator('#testbed-convergence-badge')).toHaveText('Parallel');
+      await expect(page.locator('#testbed-sep-badge')).toHaveText('Sep: 30px');
+
+      // 3. Verify 240×160 Testbed Canvas is rendered
+      const testbedCanvas = page.locator('#testbed-stereogram-canvas');
+      await expect(testbedCanvas).toBeVisible();
+      await expect(testbedCanvas).toHaveAttribute('width', '240');
+      await expect(testbedCanvas).toHaveAttribute('height', '160');
+
+      // 4. Verify Convergence Guide Dots overlay and toggle
+      const guideDotsOverlay = page.locator('.testbed-guide-dots-overlay');
+      await expect(guideDotsOverlay).toBeVisible();
+      const guideDots = page.locator('.testbed-guide-dot');
+      await expect(guideDots).toHaveCount(2);
+
+      const guideDotsCheckbox = page.locator('#testbed-guide-dots-checkbox');
+      await expect(guideDotsCheckbox).toBeChecked();
+
+      // Toggle guide dots off
+      await guideDotsCheckbox.uncheck();
+      await expect(guideDotsOverlay).not.toBeVisible();
+
+      // Toggle guide dots back on
+      await guideDotsCheckbox.check();
+      await expect(guideDotsOverlay).toBeVisible();
+
+      // 5. Test Reference Scene Selector (Benchmark Sphere vs Active Project Depth Map)
+      const benchmarkBtn = page.locator('#testbed-scene-benchmark-btn');
+      const projectBtn = page.locator('#testbed-scene-project-btn');
+
+      await expect(benchmarkBtn).toHaveClass(/active/);
+      await expect(projectBtn).not.toHaveClass(/active/);
+
+      // Switch to Active Project Depth Map
+      await projectBtn.click();
+      await expect(projectBtn).toHaveClass(/active/);
+      await expect(benchmarkBtn).not.toHaveClass(/active/);
+
+      // Switch back to Benchmark Sphere
+      await benchmarkBtn.click();
+      await expect(benchmarkBtn).toHaveClass(/active/);
+      await expect(projectBtn).not.toHaveClass(/active/);
+
+      // 6. Test interaction when scrubbing recipe parameters
+      await page.click('#generator-tab-voronoi');
+      await page.locator('#voronoi-cells-range').fill('32');
+      await expect(testbedCanvas).toBeVisible();
+
+      // Close modal
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // 7. Toggle convergence mode in sidebar to Cross-eyed
+      const crossTab = page.locator('.mode-tab', { hasText: 'Cross-eyed' });
+      await crossTab.click();
+      await expect(crossTab).toHaveClass(/active/);
+
+      // Reopen Texture Studio and assert convergence mode badge updates to Cross-eyed
+      await page.click('#open-texture-studio-btn');
+      await expect(dialog).toBeVisible();
+      await expect(page.locator('#testbed-convergence-badge')).toHaveText('Cross-eyed');
+
+      // Close modal to cleanup
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
   });
 });
 

@@ -1338,5 +1338,182 @@ input[type="range"] {
   font-size: 0.775rem;
 }
 
+/* 3D Fusibility Testbed (Instant Ocular Convergence & Fusibility Verification) */
+.preview-card.testbed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.preview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fusibility-badge {
+  font-size: 0.675rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.mode-badge {
+  font-size: 0.675rem;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  text-transform: capitalize;
+}
+
+.testbed-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.testbed-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background-color: var(--bg-color);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+}
+
+.testbed-mode-toggle {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.testbed-mode-btn {
+  background: transparent;
+  border: 1px solid var(--surface-border);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.testbed-mode-btn:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+.testbed-mode-btn.active {
+  background-color: rgba(56, 189, 248, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.15);
+}
+
+.testbed-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.testbed-sep-badge {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.testbed-guide-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.testbed-canvas-frame {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #090d16;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  background-image:
+    linear-gradient(45deg, #111827 25%, transparent 25%),
+    linear-gradient(-45deg, #111827 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #111827 75%),
+    linear-gradient(-45deg, transparent 75%, #111827 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
+.testbed-canvas-container {
+  position: relative;
+  width: 240px;
+  height: 160px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+}
+
+.preview-canvas-testbed {
+  width: 240px;
+  height: 160px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: block;
+}
+
+.testbed-guide-dots-overlay {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.testbed-guide-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  border: 1.5px solid #ffffff;
+  position: absolute;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
+.testbed-helper-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.testbed-helper-text strong {
+  color: var(--text-main);
+}
+
 
 

@@ -592,9 +592,8 @@ export const App: React.FC = () => {
     setPan({ x: 0, y: 0 });
   };
 
-  // Main stereogram computation and rendering loop
-  useEffect(() => {
-    // 1. Resolve Depth Map
+  // Resolve Depth Map
+  const resolvedDepthMap = useMemo<DepthMap>(() => {
     let depthMap: DepthMap;
     if (depthSource === 'ai' && aiBaseDepthMap) {
       const floatData = new Float32Array(aiBaseDepthMap.data.length);
@@ -651,6 +650,28 @@ export const App: React.FC = () => {
     if (blur > 0) {
       depthMap = applyGaussianBlur(depthMap, blur);
     }
+
+    return depthMap;
+  }, [
+    depthSource,
+    aiBaseDepthMap,
+    invertDepth,
+    customDepth,
+    uploadEstimateAi,
+    extrudedText,
+    textFontSize,
+    primitive,
+    selectedDepthPreset,
+    bevel,
+    blur,
+    width,
+    height,
+  ]);
+
+  // Main stereogram computation and rendering loop
+  useEffect(() => {
+    // 1. Resolve Depth Map
+    const depthMap = resolvedDepthMap;
 
     // 2. Render Depth Map Preview
     if (depthCanvasRef.current) {
@@ -764,17 +785,7 @@ export const App: React.FC = () => {
     }
   }, [
     generatorMode,
-    depthSource,
-    selectedDepthPreset,
-    primitive,
-    extrudedText,
-    textFontSize,
-    bevel,
-    blur,
-    invertDepth,
-    customDepth,
-    uploadEstimateAi,
-    aiBaseDepthMap,
+    resolvedDepthMap,
     customPattern,
     selectedTexturePreset,
     activePattern,
@@ -1579,6 +1590,10 @@ export const App: React.FC = () => {
         patternSeparation={separation}
         initialRecipe={activePatternRecipe ?? undefined}
         initialVerticalPeriod={verticalPeriod}
+        activeDepthMap={resolvedDepthMap}
+        depthMap={resolvedDepthMap}
+        convergenceMode={convergenceMode}
+        depthFactor={depthFactor}
       />
     </div>
   );

@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
+  createPrimitiveDepthMap,
+  generateTexturedStereogram,
   generatePatternTile,
+  type DepthMap,
+  type ConvergenceMode,
+  type RgbaImage,
   type PatternGeneratorType,
   type PatternRecipe,
   type PerlinTextureOptions,
@@ -18,6 +23,133 @@ export interface PatternStudioModalProps {
   patternSeparation: number;
   initialRecipe?: PatternRecipe;
   initialVerticalPeriod?: number;
+  activeDepthMap?: DepthMap | null;
+  depthMap?: DepthMap | null;
+  convergenceMode?: ConvergenceMode;
+  depthFactor?: number;
+}
+
+export const TESTBED_WIDTH = 240;
+export const TESTBED_HEIGHT = 160;
+
+/**
+ * Generates the standardized benchmark 3D floating sphere DepthMap (240×160).
+ */
+export function getBenchmarkSphereDepthMap(): DepthMap {
+  return createPrimitiveDepthMap('sphere', TESTBED_WIDTH, TESTBED_HEIGHT);
+}
+
+/**
+ * Resamples / downsamples an arbitrary source DepthMap to target dimensions
+ * using smooth bilinear interpolation to preserve depth discontinuities without aliasing.
+ */
+export function resampleDepthMap(
+  source: DepthMap,
+  targetWidth: number,
+  targetHeight: number
+): DepthMap {
+  const { width: srcW, height: srcH, data: srcData } = source;
+  const targetData = new Float32Array(targetWidth * targetHeight);
+
+  if (srcW <= 0 || srcH <= 0 || !srcData || srcData.length === 0) {
+    return createPrimitiveDepthMap('sphere', targetWidth, targetHeight);
+  }
+
+  if (srcW === targetWidth && srcH === targetHeight) {
+    targetData.set(srcData);
+    return { width: targetWidth, height: targetHeight, data: targetData };
+  }
+
+  const xRatio = srcW / targetWidth;
+  const yRatio = srcH / targetHeight;
+
+  for (let ty = 0; ty < targetHeight; ty++) {
+    const srcY = (ty + 0.5) * yRatio - 0.5;
+    const y0 = Math.max(0, Math.floor(srcY));
+    const y1 = Math.min(srcH - 1, Math.ceil(srcY));
+    const dy = srcY - y0;
+
+    const targetRowOffset = ty * targetWidth;
+    const srcRowOffset0 = y0 * srcW;
+    const srcRowOffset1 = y1 * srcW;
+
+    for (let tx = 0; tx < targetWidth; tx++) {
+      const srcX = (tx + 0.5) * xRatio - 0.5;
+      const x0 = Math.max(0, Math.floor(srcX));
+      const x1 = Math.min(srcW - 1, Math.ceil(srcX));
+      const dx = srcX - x0;
+
+      const v00 = srcData[srcRowOffset0 + x0] ?? 0;
+      const v10 = srcData[srcRowOffset0 + x1] ?? 0;
+      const v01 = srcData[srcRowOffset1 + x0] ?? 0;
+      const v11 = srcData[srcRowOffset1 + x1] ?? 0;
+
+      const top = v00 * (1 - dx) + v10 * dx;
+      const bottom = v01 * (1 - dx) + v11 * dx;
+      const val = top * (1 - dy) + bottom * dy;
+
+      targetData[targetRowOffset + tx] = Math.max(0.0, Math.min(1.0, val));
+    }
+  }
+
+  return { width: targetWidth, height: targetHeight, data: targetData };
+}
+
+/**
+ * Calculates the scaled pattern separation for the 240×160 testbed canvas.
+ */
+export function calculateTestbedSeparation(
+  patternSeparation: number,
+  baseWidth: number = 640
+): number {
+  const scale = TESTBED_WIDTH / Math.max(1, baseWidth);
+  return Math.max(12, Math.min(Math.floor(TESTBED_WIDTH / 2), Math.round(patternSeparation * scale)));
+}
+
+/**
+ * Dynamically computes a live autostereogram for the 240×160 testbed.
+ */
+export function generateTestbedStereogramImage(
+  depthMap: DepthMap,
+  recipe: PatternRecipe,
+  options: {
+    patternSeparation: number;
+    verticalPeriod: number;
+    baseWidth?: number;
+    convergenceMode?: ConvergenceMode;
+    depthFactor?: number;
+  }
+): { stereogram: RgbaImage; testbedSeparation: number } {
+  const {
+    patternSeparation,
+    verticalPeriod,
+    baseWidth = 640,
+    convergenceMode = 'parallel',
+    depthFactor = 0.85,
+  } = options;
+
+  const testbedSeparation = calculateTestbedSeparation(patternSeparation, baseWidth);
+  const scale = TESTBED_WIDTH / Math.max(1, baseWidth);
+  const testbedVerticalPeriod = Math.max(
+    12,
+    Math.min(TESTBED_HEIGHT, Math.round(verticalPeriod * scale))
+  );
+
+  // Synthesize pattern tile dynamically synchronized to testbed separation (ADR 0003)
+  const patternTile = generatePatternTile(
+    testbedSeparation,
+    testbedVerticalPeriod,
+    recipe
+  );
+
+  const stereogram = generateTexturedStereogram(depthMap, patternTile, {
+    convergenceMode,
+    patternSeparation: testbedSeparation,
+    depthFactor,
+    hsr: true,
+  });
+
+  return { stereogram, testbedSeparation };
 }
 
 /**
@@ -141,6 +273,10 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
   patternSeparation,
   initialRecipe,
   initialVerticalPeriod,
+  activeDepthMap,
+  depthMap,
+  convergenceMode = 'parallel',
+  depthFactor = 0.85,
 }) => {
   // Active generator type
   const [activeType, setActiveType] = useState<PatternGeneratorType>(
@@ -167,10 +303,18 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
   const [isGridDragging, setIsGridDragging] = useState<boolean>(false);
   const [showSeams, setShowSeams] = useState<boolean>(true);
 
+  // 3D Fusibility Testbed interactive states
+  const [testbedSceneMode, setTestbedSceneMode] = useState<'benchmark' | 'project'>('benchmark');
+  const [showTestbedGuideDots, setShowTestbedGuideDots] = useState<boolean>(true);
+
   // DOM Refs
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const canvas1xRef = useRef<HTMLCanvasElement | null>(null);
   const canvas3xRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasTestbedRef = useRef<HTMLCanvasElement | null>(null);
+  const testbedAnimFrameRef = useRef<number | null>(null);
+  const testbedDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstTestbedRenderRef = useRef<boolean>(true);
   const dragStartRef = useRef<{ x: number; y: number; startPanX: number; startPanY: number }>({
     x: 0,
     y: 0,
@@ -195,6 +339,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
       }
       setGridZoom(1.0);
       setGridPan({ x: 0, y: 0 });
+      isFirstTestbedRenderRef.current = true;
     }
   }, [isOpen, initialRecipe, initialVerticalPeriod, patternSeparation]);
 
@@ -336,6 +481,87 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
       ctx.restore();
     }
   }, [tile, showSeams]);
+
+  // Testbed Depth Map resolution
+  const benchmarkDepthMap = useMemo(() => getBenchmarkSphereDepthMap(), []);
+  const activeProjectDepth = activeDepthMap ?? depthMap ?? null;
+  const resampledProjectDepthMap = useMemo(() => {
+    if (!activeProjectDepth) return null;
+    return resampleDepthMap(activeProjectDepth, TESTBED_WIDTH, TESTBED_HEIGHT);
+  }, [activeProjectDepth]);
+
+  const currentTestbedDepthMap =
+    testbedSceneMode === 'project' && resampledProjectDepthMap
+      ? resampledProjectDepthMap
+      : benchmarkDepthMap;
+
+  const baseWidth = activeProjectDepth?.width || 640;
+  const testbedSeparation = calculateTestbedSeparation(patternSeparation, baseWidth);
+
+  // Render 3D Fusibility Mini-Stereogram testbed canvas
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const renderTestbed = () => {
+      const canvas = canvasTestbedRef.current;
+      if (!canvas) return;
+
+      try {
+        const { stereogram } = generateTestbedStereogramImage(
+          currentTestbedDepthMap,
+          currentRecipe,
+          {
+            patternSeparation,
+            verticalPeriod: tileHeight,
+            baseWidth,
+            convergenceMode,
+            depthFactor,
+          }
+        );
+
+        canvas.width = stereogram.width;
+        canvas.height = stereogram.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const imgData = ctx.createImageData(stereogram.width, stereogram.height);
+        imgData.data.set(stereogram.data);
+        ctx.putImageData(imgData, 0, 0);
+      } catch (err) {
+        console.error('Failed to render 3D fusibility testbed stereogram:', err);
+      }
+    };
+
+    if (testbedDebounceTimerRef.current) {
+      clearTimeout(testbedDebounceTimerRef.current);
+    }
+    if (testbedAnimFrameRef.current) {
+      cancelAnimationFrame(testbedAnimFrameRef.current);
+    }
+
+    if (isFirstTestbedRenderRef.current) {
+      isFirstTestbedRenderRef.current = false;
+      testbedAnimFrameRef.current = requestAnimationFrame(renderTestbed);
+    } else {
+      testbedDebounceTimerRef.current = setTimeout(() => {
+        testbedAnimFrameRef.current = requestAnimationFrame(renderTestbed);
+      }, 16);
+    }
+
+    return () => {
+      if (testbedDebounceTimerRef.current) clearTimeout(testbedDebounceTimerRef.current);
+      if (testbedAnimFrameRef.current) cancelAnimationFrame(testbedAnimFrameRef.current);
+    };
+  }, [
+    isOpen,
+    currentRecipe,
+    tileHeight,
+    patternSeparation,
+    currentTestbedDepthMap,
+    baseWidth,
+    convergenceMode,
+    depthFactor,
+  ]);
 
   // Update specific recipe parameters for current generator
   const updateRecipe = useCallback((patch: Partial<PatternRecipe>) => {
@@ -949,6 +1175,105 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* 3D Fusibility Testbed (Mini-Stereogram) */}
+            <div className="preview-card testbed-card">
+              <div className="preview-card-header">
+                <div className="preview-title-group">
+                  <div className="preview-title-row">
+                    <span className="preview-title">3D Fusibility Testbed</span>
+                    <span id="testbed-fusibility-badge" className="badge fusibility-badge">
+                      Binocular Fusibility
+                    </span>
+                  </div>
+                  <span className="preview-subtitle">
+                    Instant Convergence &amp; Discontinuity Verification
+                  </span>
+                </div>
+                <div className="testbed-header-badges">
+                  <span id="testbed-convergence-badge" className="badge mode-badge">
+                    {convergenceMode === 'cross' ? 'Cross-eyed' : 'Parallel'}
+                  </span>
+                  <span id="testbed-dimension-badge" className="badge dimension-badge">
+                    {TESTBED_WIDTH} × {TESTBED_HEIGHT} px
+                  </span>
+                </div>
+              </div>
+
+              {/* Scene Selector Toolbar & Guide Dots Toggle */}
+              <div className="testbed-toolbar">
+                <div className="testbed-mode-toggle" role="group" aria-label="Testbed reference scene">
+                  <button
+                    type="button"
+                    id="testbed-scene-benchmark-btn"
+                    className={`testbed-mode-btn ${testbedSceneMode === 'benchmark' ? 'active' : ''}`}
+                    onClick={() => setTestbedSceneMode('benchmark')}
+                    aria-pressed={testbedSceneMode === 'benchmark'}
+                  >
+                    Benchmark Sphere
+                  </button>
+                  <button
+                    type="button"
+                    id="testbed-scene-project-btn"
+                    className={`testbed-mode-btn ${testbedSceneMode === 'project' ? 'active' : ''}`}
+                    onClick={() => setTestbedSceneMode('project')}
+                    aria-pressed={testbedSceneMode === 'project'}
+                    title={
+                      activeProjectDepth
+                        ? 'Verify fusibility against your active project depth map'
+                        : 'No active project depth map available (using benchmark)'
+                    }
+                  >
+                    Active Project Depth Map
+                  </button>
+                </div>
+
+                <div className="testbed-toolbar-right">
+                  <span id="testbed-sep-badge" className="testbed-sep-badge" title="Scaled pattern separation for testbed">
+                    Sep: {testbedSeparation}px
+                  </span>
+                  <label className="checkbox-label testbed-guide-toggle">
+                    <input
+                      id="testbed-guide-dots-checkbox"
+                      type="checkbox"
+                      checked={showTestbedGuideDots}
+                      onChange={(e) => setShowTestbedGuideDots(e.target.checked)}
+                    />
+                    <span>Guide Dots</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Testbed Canvas Frame */}
+              <div className="testbed-canvas-frame">
+                <div className="testbed-canvas-container">
+                  <canvas
+                    ref={canvasTestbedRef}
+                    id="testbed-stereogram-canvas"
+                    width={TESTBED_WIDTH}
+                    height={TESTBED_HEIGHT}
+                    className="preview-canvas-testbed"
+                    aria-label="3D Fusibility Mini-Stereogram testbed canvas"
+                  />
+                  {showTestbedGuideDots && (
+                    <div className="testbed-guide-dots-overlay" aria-hidden="true">
+                      <div
+                        className="testbed-guide-dot"
+                        style={{ transform: `translateX(-${testbedSeparation / 2}px)` }}
+                      />
+                      <div
+                        className="testbed-guide-dot"
+                        style={{ transform: `translateX(${testbedSeparation / 2}px)` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <p className="testbed-helper-text">
+                Verifies <strong>Binocular Fusibility</strong> and ocular convergence comfort against 3D depth discontinuities before applying the substrate to the main canvas.
+              </p>
             </div>
           </div>
         </div>
