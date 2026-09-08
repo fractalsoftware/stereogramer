@@ -58,7 +58,12 @@ export async function handleDepthWorkerMessage(
     const errorMsg: DepthEstimationError = {
       id: req.id,
       type: ERROR,
-      error: err instanceof Error ? err.message : String(err),
+      error:
+        err instanceof Error
+          ? err.message
+          : typeof err === 'number'
+            ? `Depth estimation initialization failed (error code ${err})`
+            : String(err),
     };
     postMessage(errorMsg);
   }

@@ -45,7 +45,7 @@ describe('Depth Model Pipeline Configuration & Initialization (model.ts)', () =>
 
   it('exports expected model configuration defaults', () => {
     expect(DEFAULT_DEPTH_MODEL).toBe('onnx-community/Depth-Anything-V2-Small-ONNX');
-    expect(DEFAULT_MODEL_DTYPE).toBe('q8');
+    expect(DEFAULT_MODEL_DTYPE).toBe('fp16');
     expect(DEFAULT_EXECUTION_DEVICE).toBe('auto');
   });
 

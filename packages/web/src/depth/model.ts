@@ -8,7 +8,7 @@ import type {
 import { toUint8ClampedArray } from './utils.js';
 
 export const DEFAULT_DEPTH_MODEL = 'onnx-community/Depth-Anything-V2-Small-ONNX';
-export const DEFAULT_MODEL_DTYPE = 'q8';
+export const DEFAULT_MODEL_DTYPE = 'fp16';
 export const DEFAULT_EXECUTION_DEVICE = 'auto' as const;
 
 /**
@@ -35,6 +35,11 @@ export function configureTransformersEnv(): void {
     typeof (globalThis as any).importScripts === 'function'
   ) {
     env.allowLocalModels = false;
+  }
+
+  // Silence benign ONNX Runtime node assignment / CPU fallback warnings
+  if (env.backends?.onnx) {
+    env.backends.onnx.logLevel = 'error';
   }
 }
 
@@ -86,10 +91,15 @@ export async function createDepthModelPipeline(
     }
   };
 
+  const session_options = {
+    logSeverityLevel: 3, // Suppress benign graph partitioning / CPU fallback warnings
+  };
+
   if (device === 'wasm') {
     return await factory('depth-estimation', model, {
       device: 'wasm',
       dtype,
+      session_options,
       progress_callback: progressCallback,
     });
   }
@@ -103,6 +113,7 @@ export async function createDepthModelPipeline(
     return await factory('depth-estimation', model, {
       device: 'wasm',
       dtype,
+      session_options,
       progress_callback: progressCallback,
     });
   }
@@ -112,18 +123,37 @@ export async function createDepthModelPipeline(
     return await factory('depth-estimation', model, {
       device: 'webgpu',
       dtype,
+      session_options,
       progress_callback: progressCallback,
     });
   } catch (gpuError) {
+    const errorDetails =
+      gpuError instanceof Error
+        ? gpuError.message
+        : typeof gpuError === 'number'
+          ? `Wasm/WebGPU error code ${gpuError}`
+          : String(gpuError);
     console.warn(
-      'WebGPU depth estimation initialization failed, gracefully falling back to WASM:',
-      gpuError
+      `WebGPU depth estimation initialization failed (${errorDetails}), gracefully falling back to WASM.`
     );
-    return await factory('depth-estimation', model, {
-      device: 'wasm',
-      dtype,
-      progress_callback: progressCallback,
-    });
+    try {
+      return await factory('depth-estimation', model, {
+        device: 'wasm',
+        dtype: dtype === 'fp16' ? 'fp32' : dtype,
+        session_options,
+        progress_callback: progressCallback,
+      });
+    } catch (wasmError) {
+      const wasmDetails =
+        wasmError instanceof Error
+          ? wasmError.message
+          : typeof wasmError === 'number'
+            ? `Wasm error code ${wasmError}`
+            : String(wasmError);
+      throw new Error(
+        `Depth estimation model initialization failed on both WebGPU and WASM: ${wasmDetails}`
+      );
+    }
   }
 }
 
