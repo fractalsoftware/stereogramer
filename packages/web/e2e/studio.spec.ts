@@ -22,6 +22,14 @@ test.describe('Stereogramer Web Studio E2E', () => {
     // Guide dots overlay should be present initially
     const guideDots = page.locator('.guide-dots-overlay');
     await expect(guideDots).toBeVisible();
+
+    // Verify side-by-side layout: viewport is positioned to the right of sidebar, not stacked below
+    const sidebarBox = await page.locator('.sidebar').boundingBox();
+    const viewportBox = await page.locator('.viewport-container').boundingBox();
+    expect(sidebarBox).not.toBeNull();
+    expect(viewportBox).not.toBeNull();
+    expect(viewportBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x + sidebarBox!.width);
+    expect(viewportBox!.y).toBeLessThan(sidebarBox!.y + 100);
   });
 
   test('opens preset drawer and selects a curated depth model and texture', async ({ page }) => {
