@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @stereogramer/web dev",
     "build": "pnpm --filter \"./packages/*\" build",
-    "test": "pnpm --filter @stereogramer/core test && pnpm --filter @stereogramer/cli test",
+    "test": "pnpm --filter @stereogramer/core test && pnpm --filter @stereogramer/cli test && pnpm --filter @stereogramer/web test",
     "typecheck": "tsc -b packages/core packages/cli packages/web"
   },
   "devDependencies": {
