@@ -449,4 +449,144 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(canvas).toBeVisible();
     });
   });
+
+  test.describe('Texture Studio (Pattern Procedural Synthesis & Toroidal Inspector)', () => {
+    test('opens Texture Studio from sidebar, explores generator tabs, and verifies accessible dialog semantics', async ({ page }) => {
+      // Open Texture Studio via sidebar button
+      const openBtn = page.locator('#open-texture-studio-btn');
+      await expect(openBtn).toBeVisible();
+      await openBtn.click();
+
+      // Check modal overlay and dialog attributes
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('aria-modal', 'true');
+      await expect(dialog).toHaveAttribute('aria-labelledby', 'pattern-studio-title');
+      await expect(page.locator('#pattern-studio-title')).toHaveText('Texture Studio');
+
+      // Verify default 1x and 3x3 dimension badges
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 80 px');
+      await expect(page.locator('#pattern-3x-badge')).toHaveText('240 × 240 px');
+
+      // Switch generator tabs and verify tailored controls appear
+      // Voronoi
+      await page.click('#generator-tab-voronoi');
+      await expect(page.locator('#voronoi-cells-range')).toBeVisible();
+
+      // Checkerboard
+      await page.click('#generator-tab-checker');
+      await expect(page.locator('#checker-cell-range')).toBeVisible();
+
+      // Stripes
+      await page.click('#generator-tab-stripes');
+      await expect(page.locator('#stripes-width-range')).toBeVisible();
+      await expect(page.locator('#stripes-direction-select')).toBeVisible();
+
+      // Mosaic
+      await page.click('#generator-tab-mosaic');
+      await expect(page.locator('#mosaic-cell-range')).toBeVisible();
+      await expect(page.locator('#mosaic-radius-range')).toBeVisible();
+
+      // Perlin
+      await page.click('#generator-tab-perlin');
+      await expect(page.locator('#perlin-scale-range')).toBeVisible();
+      await expect(page.locator('#perlin-octaves-range')).toBeVisible();
+
+      // Verify Escape key closes dialog
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test('opens Texture Studio from preset drawer and closes via Cancel button', async ({ page }) => {
+      // Open preset drawer
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      // Click Texture Studio button inside drawer
+      const drawerStudioBtn = page.locator('#drawer-open-texture-studio-btn');
+      await expect(drawerStudioBtn).toBeVisible();
+      await drawerStudioBtn.click();
+
+      // Drawer should close and modal should open
+      await expect(drawer).not.toBeVisible();
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Close via Cancel button
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test('adjusts vertical period slider and inspects 3x3 repetition grid zoom controls', async ({ page }) => {
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Adjust vertical period slider to 120px
+      const vPeriodRange = page.locator('#vertical-period-range');
+      await vPeriodRange.fill('120');
+
+      // Badges should update in real-time
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 120 px');
+      await expect(page.locator('#pattern-3x-badge')).toHaveText('240 × 360 px');
+
+      // Test 3x3 repetition zoom controls
+      const zoomIndicator = page.locator('#grid-zoom-indicator');
+      await expect(zoomIndicator).toHaveText('100%');
+
+      // Zoom in
+      await page.locator('.grid-toolbar button[title="Zoom In"]').click();
+      await expect(zoomIndicator).toHaveText('125%');
+
+      // Zoom out
+      await page.locator('.grid-toolbar button[title="Zoom Out"]').click();
+      await expect(zoomIndicator).toHaveText('100%');
+
+      // Test seed shuffle button
+      const seedInput = page.locator('#recipe-seed-input');
+      const initialSeed = await seedInput.inputValue();
+      await page.click('#recipe-seed-random-btn');
+      const randomizedSeed = await seedInput.inputValue();
+      expect(randomizedSeed).not.toEqual(initialSeed);
+
+      // Reset to defaults
+      await page.click('#pattern-studio-reset-btn');
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 80 px');
+
+      await page.click('#pattern-studio-cancel-btn');
+    });
+
+    test('applies custom Voronoi pattern to stereogram and reverts to standard preset', async ({ page }) => {
+      await page.click('#open-texture-studio-btn');
+
+      // Switch to Voronoi and customize
+      await page.click('#generator-tab-voronoi');
+      await page.locator('#voronoi-cells-range').fill('24');
+      await page.locator('#vertical-period-range').fill('96');
+
+      // Click Apply Pattern
+      await page.click('#pattern-studio-apply-btn');
+
+      // Modal closes
+      await expect(page.locator('div[role="dialog"]')).not.toBeVisible();
+
+      // Sidebar shows active custom recipe card
+      const customCard = page.locator('.custom-recipe-active-card');
+      await expect(customCard).toBeVisible();
+      await expect(customCard).toContainText('Custom Recipe');
+      await expect(customCard).toContainText('VORONOI');
+      await expect(customCard).toContainText('80 × 96 px');
+
+      // Main stereogram canvas remains visible and updated
+      const canvas = page.locator('.canvas-wrapper canvas');
+      await expect(canvas).toBeVisible();
+
+      // Clear custom recipe back to standard preset
+      await page.click('#clear-custom-recipe-btn');
+      await expect(customCard).not.toBeVisible();
+      await expect(page.locator('#texture-preset-select')).toBeVisible();
+    });
+  });
 });
+
