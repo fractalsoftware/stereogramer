@@ -1,4 +1,5 @@
 import type { RawImageInput } from './types.js';
+import { toUint8ClampedArray } from './utils.js';
 import { resampleRgba } from './resampler.js';
 
 /**
@@ -38,12 +39,7 @@ export function preprocessImage(
     throw new Error(`Invalid image dimensions: ${image.width}x${image.height}`);
   }
 
-  const rawBytes =
-    image.data instanceof ArrayBuffer
-      ? new Uint8ClampedArray(image.data)
-      : image.data instanceof Uint8ClampedArray
-      ? image.data
-      : new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  const rawBytes = toUint8ClampedArray(image.data);
 
   const minBytesNeeded = image.width * image.height * 4;
   if (rawBytes.length < minBytesNeeded) {

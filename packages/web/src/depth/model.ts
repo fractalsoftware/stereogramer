@@ -5,6 +5,7 @@ import type {
   DepthPipelineOptions,
   RawImageInput,
 } from './types.js';
+import { toUint8ClampedArray } from './utils.js';
 
 export const DEFAULT_DEPTH_MODEL = 'onnx-community/Depth-Anything-V2-Small-ONNX';
 export const DEFAULT_MODEL_DTYPE = 'q8';
@@ -175,16 +176,7 @@ export async function inferDepthFromModel(
   if (imageInput instanceof RawImage) {
     rawImg = imageInput;
   } else {
-    const rawBytes =
-      imageInput.data instanceof ArrayBuffer
-        ? new Uint8ClampedArray(imageInput.data)
-        : imageInput.data instanceof Uint8ClampedArray
-        ? imageInput.data
-        : new Uint8ClampedArray(
-            imageInput.data.buffer,
-            imageInput.data.byteOffset,
-            imageInput.data.byteLength
-          );
+    const rawBytes = toUint8ClampedArray(imageInput.data);
 
     rawImg = new RawImage(rawBytes, imageInput.width, imageInput.height, 4);
   }

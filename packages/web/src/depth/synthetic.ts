@@ -1,4 +1,5 @@
 import type { DepthMap, RawImageInput, SyntheticDepthOptions } from './types.js';
+import { toUint8ClampedArray } from './utils.js';
 import { normalizeDepth } from './normalizer.js';
 import { resampleBilinear } from './resampler.js';
 
@@ -20,12 +21,7 @@ export function generateSyntheticDepth(
     throw new Error(`Invalid image dimensions for synthetic depth generation: ${srcW}x${srcH}`);
   }
 
-  const rawBytes =
-    image.data instanceof ArrayBuffer
-      ? new Uint8ClampedArray(image.data)
-      : image.data instanceof Uint8ClampedArray
-      ? image.data
-      : new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  const rawBytes = toUint8ClampedArray(image.data);
 
   const minBytes = srcW * srcH * 4;
   if (rawBytes.length < minBytes) {

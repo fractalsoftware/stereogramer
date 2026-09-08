@@ -4,6 +4,7 @@ import {
   validateDepthInvariant,
   getDepthExtrema,
 } from './normalizer.js';
+import { toUint8ClampedArray } from './utils.js';
 import { resampleBilinear, resampleRgba } from './resampler.js';
 import {
   preprocessImage,
@@ -574,3 +575,29 @@ describe('DepthEstimator Client Helper (depthEstimator.ts)', () => {
     await expect(promise).rejects.toThrow('DepthEstimator terminated');
   });
 });
+
+describe('Buffer Helpers (utils.ts)', () => {
+  it('converts ArrayBuffer to Uint8ClampedArray', () => {
+    const buffer = new Uint8Array([10, 20, 30, 40]).buffer;
+    const result = toUint8ClampedArray(buffer);
+    expect(result).toBeInstanceOf(Uint8ClampedArray);
+    expect(result.length).toBe(4);
+    expect(Array.from(result)).toEqual([10, 20, 30, 40]);
+  });
+
+  it('preserves existing Uint8ClampedArray without reallocating', () => {
+    const original = new Uint8ClampedArray([50, 60, 70, 80]);
+    const result = toUint8ClampedArray(original);
+    expect(result).toBe(original);
+  });
+
+  it('wraps Uint8Array with correct byte offset and length', () => {
+    const fullBuffer = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const subArray = fullBuffer.subarray(2, 6); // [2, 3, 4, 5]
+    const result = toUint8ClampedArray(subArray);
+    expect(result).toBeInstanceOf(Uint8ClampedArray);
+    expect(result.length).toBe(4);
+    expect(Array.from(result)).toEqual([2, 3, 4, 5]);
+  });
+});
+
