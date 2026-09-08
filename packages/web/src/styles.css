@@ -1515,5 +1515,172 @@ input[type="range"] {
   color: var(--text-main);
 }
 
+/* ==========================================================================
+   Recipe Library, Sharing & Custom Pattern Swatches
+   ========================================================================== */
+
+.recipe-library-card {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.recipe-save-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pattern-name-input {
+  flex: 1;
+  background-color: var(--bg-color);
+  border: 1px solid var(--surface-border);
+  color: var(--text-main);
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.825rem;
+  transition: border-color 0.15s ease;
+}
+
+.pattern-name-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.pattern-save-feedback {
+  background-color: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.775rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pattern-import-error {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  padding: 0.4rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.775rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.recipe-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recipe-actions-row .btn-sm {
+  flex: 1;
+  min-width: 100px;
+  justify-content: center;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.btn-file-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+/* Preset Drawer Custom Patterns */
+.preset-drawer-section {
+  margin-top: 1.25rem;
+}
+
+.preset-empty-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.75rem;
+  background-color: rgba(15, 23, 42, 0.4);
+  border: 1px dashed var(--surface-border);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.custom-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.custom-pattern-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.pattern-thumb-canvas {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  background-color: #0b0f19;
+  image-rendering: pixelated;
+}
+
+.custom-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.custom-badge {
+  font-size: 0.65rem;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.custom-card-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.custom-card-actions .apply-custom-pattern-btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.custom-card-actions .delete-custom-pattern-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  padding: 0.25rem;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.custom-card-actions .delete-custom-pattern-btn:hover {
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
 
 

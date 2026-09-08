@@ -15,6 +15,11 @@ import {
   type MosaicTextureOptions,
   type RgbaColor,
 } from '@stereogramer/core';
+import {
+  savePattern,
+  parseAndValidateRecipeJson,
+  type ExportedPatternRecipe,
+} from './storage.js';
 
 export interface PatternStudioModalProps {
   isOpen: boolean;
@@ -307,6 +312,12 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
   const [testbedSceneMode, setTestbedSceneMode] = useState<'benchmark' | 'project'>('benchmark');
   const [showTestbedGuideDots, setShowTestbedGuideDots] = useState<boolean>(true);
 
+  // Recipe Library, Storage & Sharing states
+  const [recipeName, setRecipeName] = useState<string>('');
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // DOM Refs
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const canvas1xRef = useRef<HTMLCanvasElement | null>(null);
@@ -332,6 +343,11 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
           [initialRecipe.type]: { ...initialRecipe },
         }));
       }
+      const initialGen = initialRecipe?.type ?? activeType;
+      setRecipeName(`${initialGen.charAt(0).toUpperCase() + initialGen.slice(1)} Pattern`);
+      setSaveFeedback(null);
+      setImportError(null);
+
       if (initialVerticalPeriod !== undefined) {
         setVerticalPeriod(Math.max(30, Math.min(240, initialVerticalPeriod)));
       } else {
@@ -342,6 +358,14 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
       isFirstTestbedRenderRef.current = true;
     }
   }, [isOpen, initialRecipe, initialVerticalPeriod, patternSeparation]);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Focus trapping and ESC key listener
   useEffect(() => {
@@ -627,6 +651,120 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
     setGridPan({ x: 0, y: 0 });
   };
 
+  const handleSaveToLibrary = () => {
+    try {
+      const name = recipeName.trim() || `${activeType.charAt(0).toUpperCase() + activeType.slice(1)} Pattern`;
+      savePattern(name, tileHeight, currentRecipe);
+      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+      setSaveFeedback(`Saved "${name}" to library!`);
+      setImportError(null);
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setSaveFeedback(null);
+      }, 4000);
+    } catch (err: any) {
+      console.error('Failed to save pattern:', err);
+      setImportError(err.message || 'Failed to save pattern to library');
+    }
+  };
+
+  const handleDownloadPng = () => {
+    try {
+      let dataUrl: string | null = null;
+      if (canvas1xRef.current) {
+        dataUrl = canvas1xRef.current.toDataURL('image/png');
+      } else {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = tileWidth;
+        offscreen.height = tileHeight;
+        const ctx = offscreen.getContext('2d');
+        if (ctx) {
+          const tileImg = generatePatternTile(tileWidth, tileHeight, currentRecipe);
+          const imgData = ctx.createImageData(tileWidth, tileHeight);
+          imgData.data.set(tileImg.data);
+          ctx.putImageData(imgData, 0, 0);
+          dataUrl = offscreen.toDataURL('image/png');
+        }
+      }
+
+      if (!dataUrl) return;
+
+      const filename = `pattern-${currentRecipe.type}-${tileWidth}x${tileHeight}.png`;
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to download tile PNG:', err);
+    }
+  };
+
+  const handleExportJson = () => {
+    try {
+      const name = recipeName.trim() || `${activeType.charAt(0).toUpperCase() + activeType.slice(1)} Pattern`;
+      const exportData: ExportedPatternRecipe = {
+        name,
+        verticalPeriod: tileHeight,
+        recipe: currentRecipe,
+      };
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const filename = `pattern-${name.toLowerCase().replace(/[^a-z0-9_-]/g, '-') || currentRecipe.type}.json`;
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export recipe JSON:', err);
+    }
+  };
+
+  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const { name, verticalPeriod: vPeriod, recipe } = parseAndValidateRecipeJson(text);
+
+        setActiveType(recipe.type);
+        setRecipes((prev) => ({
+          ...prev,
+          [recipe.type]: { ...recipe },
+        }));
+        setVerticalPeriod(vPeriod);
+        if (name) {
+          setRecipeName(name);
+        }
+
+        setImportError(null);
+        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+        setSaveFeedback(`Loaded recipe "${name}" (${recipe.type.toUpperCase()})`);
+        feedbackTimeoutRef.current = setTimeout(() => {
+          setSaveFeedback(null);
+        }, 4000);
+      } catch (err: any) {
+        console.error('JSON import error:', err);
+        setImportError(err.message || 'Invalid pattern recipe JSON format');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setImportError('Failed to read recipe file');
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -641,6 +779,7 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
       <div
         ref={dialogRef}
         role="dialog"
+        id="pattern-studio-dialog"
         aria-modal="true"
         aria-labelledby="pattern-studio-title"
         className="pattern-studio-dialog"
@@ -1070,6 +1209,85 @@ export const PatternStudioModal: React.FC<PatternStudioModalProps> = ({
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Recipe Library, Import & Export Card */}
+            <div className="control-group recipe-library-card">
+              <label className="section-label">Recipe Library &amp; Sharing</label>
+              <div className="recipe-save-form">
+                <input
+                  id="pattern-recipe-name-input"
+                  type="text"
+                  className="pattern-name-input"
+                  placeholder="Custom Recipe Name"
+                  value={recipeName}
+                  onChange={(e) => setRecipeName(e.target.value)}
+                  aria-label="Custom recipe name"
+                />
+                <button
+                  id="pattern-studio-save-library-btn"
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleSaveToLibrary}
+                >
+                  💾 Save to Library
+                </button>
+              </div>
+
+              {saveFeedback && (
+                <div id="pattern-studio-feedback" className="pattern-save-feedback" role="status">
+                  ✓ {saveFeedback}
+                </div>
+              )}
+
+              {importError && (
+                <div id="pattern-studio-error" className="pattern-import-error" role="alert">
+                  ⚠ {importError}
+                </div>
+              )}
+
+              <div className="recipe-actions-row">
+                <button
+                  id="pattern-studio-download-png-btn"
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={handleDownloadPng}
+                  title="Download seamless 1x tile as PNG"
+                >
+                  🖼️ Download Tile PNG
+                </button>
+                <button
+                  id="pattern-studio-export-json-btn"
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={handleExportJson}
+                  title="Export active recipe configuration to JSON"
+                >
+                  📤 Export JSON
+                </button>
+                <label
+                  id="pattern-studio-import-json-btn"
+                  htmlFor="pattern-studio-import-json-input"
+                  className="btn-secondary btn-sm btn-file-label"
+                  title="Import a recipe JSON file"
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      document.getElementById('pattern-studio-import-json-input')?.click();
+                    }
+                  }}
+                >
+                  📥 Import JSON
+                  <input
+                    id="pattern-studio-import-json-input"
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportJson}
+                    style={{ display: 'none' }}
+                  />
+                </label>
               </div>
             </div>
           </div>

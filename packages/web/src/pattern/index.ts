@@ -11,3 +11,17 @@ export {
   hexToRgba,
   type PatternStudioModalProps,
 } from './PatternStudioModal.js';
+
+export {
+  CUSTOM_PATTERNS_STORAGE_KEY,
+  getSavedPatterns,
+  savePattern,
+  deleteSavedPattern,
+  clearSavedPatterns,
+  isValidPatternRecipe,
+  isValidSavedPattern,
+  parseAndValidateRecipeJson,
+  type SavedPatternRecipe,
+  type ExportedPatternRecipe,
+} from './storage.js';
+

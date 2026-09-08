@@ -1,6 +1,7 @@
 import {
   type DepthMap,
   type RgbaImage,
+  type PatternRecipe,
   createTorusDepthMap,
   createHeartDepthMap,
   generatePatternTile,
@@ -22,6 +23,7 @@ export interface TexturePresetInfo {
   id: TexturePresetName;
   name: string;
   description: string;
+  recipe: PatternRecipe;
   generate: (width: number, height: number) => RgbaImage;
 }
 
@@ -308,30 +310,35 @@ export const TEXTURE_PRESETS: TexturePresetInfo[] = [
     id: 'perlin',
     name: 'Perlin Cloud Waves',
     description: 'Seamless procedural fractal gradient noise',
+    recipe: { type: 'perlin', scale: 5, octaves: 3 },
     generate: (w, h) => generatePatternTile(w, h, { type: 'perlin', scale: 5, octaves: 3 }),
   },
   {
     id: 'voronoi',
     name: 'Voronoi Organic Cells',
     description: 'Seamless cellular tessellation with boundary edges',
+    recipe: { type: 'voronoi', numCells: 18 },
     generate: (w, h) => generatePatternTile(w, h, { type: 'voronoi', numCells: 18 }),
   },
   {
     id: 'checker',
     name: 'Geometric Tiles',
     description: 'High-contrast alternating cyan & slate squares',
+    recipe: { type: 'checker', cellSize: 10 },
     generate: (w, h) => generatePatternTile(w, h, { type: 'checker', cellSize: 10 }),
   },
   {
     id: 'stripes',
     name: 'Color Spectrum Bands',
     description: 'Vibrant 4-tone vertical color stripes',
+    recipe: { type: 'stripes', stripeWidth: 10 },
     generate: (w, h) => generatePatternTile(w, h, { type: 'stripes', stripeWidth: 10 }),
   },
   {
     id: 'mosaic',
     name: 'Dot Mosaic',
     description: 'Circular polka-dot grid with contrasting background',
+    recipe: { type: 'mosaic', cellSize: 20, dotRadius: 7 },
     generate: (w, h) => generatePatternTile(w, h, { type: 'mosaic', cellSize: 20, dotRadius: 7 }),
   },
 ];

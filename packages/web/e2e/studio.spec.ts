@@ -666,5 +666,181 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(dialog).not.toBeVisible();
     });
   });
+
+  test.describe('Dynamic Separation Sync, Preset Library & JSON Sharing (Ticket 19)', () => {
+    test('dynamically synchronizes pattern tile width with separation slider for custom recipes and presets', async ({ page }) => {
+      // 1. Open Texture Studio, create a Voronoi recipe and apply it
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      await page.click('#generator-tab-voronoi');
+      await page.click('#pattern-studio-apply-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // Verify active recipe banner in sidebar shows custom recipe
+      const recipeCard = page.locator('.custom-recipe-active-card');
+      await expect(recipeCard).toBeVisible();
+      await expect(recipeCard).toContainText('Custom Recipe');
+      await expect(recipeCard).toContainText('VORONOI');
+      await expect(recipeCard).toContainText('80 × 80 px');
+
+      // 2. Adjust separation slider to 96px
+      const sepRange = page.locator('#separation-range');
+      await sepRange.fill('96');
+      await expect(page.locator('label[for="separation-range"] .val')).toHaveText('96px');
+
+      // Assert that custom recipe dimensions dynamically synchronized to 96px without phase jumps
+      await expect(recipeCard).toContainText('96 × 80 px');
+
+      // 3. Switch to a built-in procedural preset via Preset Drawer
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      const perlinCard = page.locator('.preset-card', { hasText: 'Perlin Cloud Waves' });
+      await expect(perlinCard).toBeVisible();
+      await perlinCard.click();
+      await expect(drawer).not.toBeVisible();
+
+      // 4. Adjust separation slider again to 110px
+      await sepRange.fill('110');
+      await expect(page.locator('label[for="separation-range"] .val')).toHaveText('110px');
+
+      // Stereogram canvas should remain visible and updated
+      const canvas = page.locator('.canvas-wrapper canvas');
+      await expect(canvas).toBeVisible();
+    });
+
+    test('saves custom recipe to localStorage library and applies/deletes from Preset Drawer', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // 2. Select Mosaic generator, configure name and save to library
+      await page.click('#generator-tab-mosaic');
+      const nameInput = page.locator('#pattern-recipe-name-input');
+      await nameInput.fill('Emerald Mosaic');
+
+      await page.click('#pattern-studio-save-library-btn');
+      const feedback = page.locator('#pattern-studio-feedback');
+      await expect(feedback).toBeVisible();
+      await expect(feedback).toContainText('Saved "Emerald Mosaic" to library!');
+
+      // Close modal
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // 3. Open Preset Drawer and assert Custom Patterns section contains "Emerald Mosaic"
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      const customCard = page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' });
+      await expect(customCard).toBeVisible();
+      await expect(customCard.locator('.custom-badge')).toHaveText('MOSAIC');
+      await expect(customCard.locator('.pattern-thumb-canvas')).toBeVisible();
+
+      // 4. Click Apply on custom pattern card
+      const applyBtn = customCard.locator('.apply-custom-pattern-btn');
+      await applyBtn.click();
+      await expect(drawer).not.toBeVisible();
+
+      // Verify active recipe banner in sidebar
+      const recipeCard = page.locator('.custom-recipe-active-card');
+      await expect(recipeCard).toBeVisible();
+      await expect(recipeCard).toContainText('Custom Recipe');
+      await expect(recipeCard).toContainText('MOSAIC');
+
+      // 5. Re-open Preset Drawer and delete custom pattern
+      await page.click('#preset-drawer-trigger');
+      await expect(drawer).toBeVisible();
+
+      const deleteBtn = page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' }).locator('.delete-custom-pattern-btn');
+      await deleteBtn.click();
+
+      // Assert pattern is removed and empty note is shown
+      await expect(page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' })).not.toBeVisible();
+      await expect(page.locator('.preset-empty-note')).toBeVisible();
+
+      // Close drawer
+      await page.click('.btn-close-drawer');
+      await expect(drawer).not.toBeVisible();
+    });
+
+    test('downloads tile PNG and exports/imports recipe JSON with live preview update', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Select Checker generator
+      await page.click('#generator-tab-checker');
+      await page.locator('#pattern-recipe-name-input').fill('Geometric Checker');
+
+      // 2. Test Download Tile PNG
+      const pngDownloadPromise = page.waitForEvent('download');
+      await page.click('#pattern-studio-download-png-btn');
+      const pngDownload = await pngDownloadPromise;
+      expect(pngDownload.suggestedFilename()).toMatch(/^pattern-checker-\d+x\d+\.png$/);
+
+      // 3. Test Export Recipe JSON
+      const jsonDownloadPromise = page.waitForEvent('download');
+      await page.click('#pattern-studio-export-json-btn');
+      const jsonDownload = await jsonDownloadPromise;
+      expect(jsonDownload.suggestedFilename()).toMatch(/^pattern-geometric-checker\.json$/);
+
+      // 4. Test Import Recipe JSON (Valid stripes payload)
+      const validJsonPayload = JSON.stringify({
+        name: 'Cyberpunk Neon Stripes',
+        verticalPeriod: 96,
+        recipe: {
+          type: 'stripes',
+          stripeWidth: 16,
+          colors: [
+            [255, 0, 128, 255],
+            [0, 255, 255, 255],
+          ],
+        },
+      });
+
+      await page.setInputFiles('#pattern-studio-import-json-input', {
+        name: 'cyberpunk-stripes.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(validJsonPayload),
+      });
+
+      // Verify that controls update live: stripes tab selected, name updated, feedback banner displayed
+      await expect(page.locator('#generator-tab-stripes')).toHaveClass(/active/);
+      await expect(page.locator('#pattern-recipe-name-input')).toHaveValue('Cyberpunk Neon Stripes');
+      await expect(page.locator('#vertical-period-range')).toHaveValue('96');
+      await expect(page.locator('#pattern-studio-feedback')).toContainText('Loaded recipe "Cyberpunk Neon Stripes"');
+
+      // 5. Test Import Recipe JSON with invalid schema (error handling)
+      const invalidJsonPayload = JSON.stringify({
+        name: 'Malformed Recipe',
+        recipe: {
+          type: 'perlin',
+          scale: -99, // invalid scale
+        },
+      });
+
+      await page.setInputFiles('#pattern-studio-import-json-input', {
+        name: 'invalid-recipe.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(invalidJsonPayload),
+      });
+
+      // Verify error banner is rendered
+      const errorBanner = page.locator('#pattern-studio-error');
+      await expect(errorBanner).toBeVisible();
+      await expect(errorBanner).toContainText('Invalid recipe configuration');
+
+      // Close modal to cleanup
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
+  });
 });
 

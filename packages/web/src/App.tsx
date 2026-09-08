@@ -25,7 +25,12 @@ import {
   type DepthEstimator,
   type DepthEstimationProgress,
 } from './depth/index.js';
-import { PatternStudioModal } from './pattern/index.js';
+import {
+  PatternStudioModal,
+  getSavedPatterns,
+  deleteSavedPattern,
+  type SavedPatternRecipe,
+} from './pattern/index.js';
 
 type GeneratorMode = 'sirds' | 'textured';
 type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
@@ -42,6 +47,30 @@ interface UploadedImage {
   data: Uint8ClampedArray;
   thumbUrl: string;
   filename: string;
+}
+
+function PatternThumbnail({ recipe }: { recipe: PatternRecipe }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    try {
+      const tile = generatePatternTile(48, 48, recipe);
+      canvas.width = 48;
+      canvas.height = 48;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const imgData = ctx.createImageData(48, 48);
+        imgData.data.set(tile.data);
+        ctx.putImageData(imgData, 0, 0);
+      }
+    } catch (e) {
+      console.error('Failed to render thumbnail:', e);
+    }
+  }, [recipe]);
+
+  return <canvas ref={canvasRef} width={48} height={48} className="pattern-thumb-canvas" aria-hidden="true" />;
 }
 
 export const App: React.FC = () => {
@@ -64,6 +93,7 @@ export const App: React.FC = () => {
   const [activePatternRecipe, setActivePatternRecipe] = useState<PatternRecipe | null>(null);
   const [verticalPeriod, setVerticalPeriod] = useState<number>(80);
   const [isPatternStudioOpen, setIsPatternStudioOpen] = useState<boolean>(false);
+  const [savedPatterns, setSavedPatterns] = useState<SavedPatternRecipe[]>(() => getSavedPatterns());
 
   // AI 2D Photo Depth Estimation state
   const [aiPhoto, setAiPhoto] = useState<UploadedImage | null>(null);
@@ -124,6 +154,19 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  // Synchronize saved pattern recipe library with localStorage updates
+  useEffect(() => {
+    const handleUpdate = () => {
+      setSavedPatterns(getSavedPatterns());
+    };
+    window.addEventListener('stereogramer:patterns-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('stereogramer:patterns-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   // Procedural pattern tile dynamically synchronized with pattern separation (ADR 0003)
   const activePattern = useMemo<RgbaImage>(() => {
     if (customPattern) {
@@ -135,7 +178,7 @@ export const App: React.FC = () => {
       return generatePatternTile(tileW, tileH, activePatternRecipe);
     }
     const preset = TEXTURE_PRESETS.find((p) => p.id === selectedTexturePreset) || TEXTURE_PRESETS[0]!;
-    return preset.generate(tileW, tileH);
+    return generatePatternTile(tileW, tileH, preset.recipe);
   }, [customPattern, activePatternRecipe, selectedTexturePreset, separation, verticalPeriod]);
 
   // Maximum canvas dimension to downscale before transferring to Web Worker (Task 5)
@@ -829,7 +872,10 @@ export const App: React.FC = () => {
             type="button"
             className="btn-preset-trigger"
             id="preset-drawer-trigger"
-            onClick={() => setIsDrawerOpen(true)}
+            onClick={() => {
+              setSavedPatterns(getSavedPatterns());
+              setIsDrawerOpen(true);
+            }}
           >
             <span>📚</span>
             <span>Browse Presets & Textures</span>
@@ -1572,6 +1618,77 @@ export const App: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {/* Custom Pattern Library Section */}
+            <div className="preset-drawer-section">
+              <div className="preset-section-header">
+                <div className="preset-section-title">Custom Patterns</div>
+              </div>
+              {savedPatterns.length === 0 ? (
+                <div className="preset-empty-note">
+                  No custom patterns saved yet. Design and save one in the Texture Studio!
+                </div>
+              ) : (
+                <div className="preset-grid custom-preset-grid">
+                  {savedPatterns.map((saved) => (
+                    <div
+                      key={saved.id}
+                      className={`preset-card custom-pattern-card ${
+                        activePatternRecipe && JSON.stringify(activePatternRecipe) === JSON.stringify(saved.recipe)
+                          ? 'active'
+                          : ''
+                      }`}
+                      onClick={() => {
+                        setActivePatternRecipe(saved.recipe);
+                        setVerticalPeriod(saved.verticalPeriod);
+                        setCustomPattern(null);
+                        setGeneratorMode('textured');
+                        setIsDrawerOpen(false);
+                      }}
+                    >
+                      <PatternThumbnail recipe={saved.recipe} />
+                      <div className="preset-card-info">
+                        <div className="custom-card-title-row">
+                          <span className="preset-card-name">{saved.name}</span>
+                          <span className="badge custom-badge">{saved.recipe.type.toUpperCase()}</span>
+                        </div>
+                        <span className="preset-card-desc">
+                          {Math.round(separation)} × {saved.verticalPeriod} px
+                        </span>
+                      </div>
+                      <div className="custom-card-actions">
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm apply-custom-pattern-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePatternRecipe(saved.recipe);
+                            setVerticalPeriod(saved.verticalPeriod);
+                            setCustomPattern(null);
+                            setGeneratorMode('textured');
+                            setIsDrawerOpen(false);
+                          }}
+                        >
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon-clear delete-custom-pattern-btn"
+                          title="Delete custom pattern"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSavedPattern(saved.id);
+                            setSavedPatterns(getSavedPatterns());
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1588,7 +1705,7 @@ export const App: React.FC = () => {
           setIsPatternStudioOpen(false);
         }}
         patternSeparation={separation}
-        initialRecipe={activePatternRecipe ?? undefined}
+        initialRecipe={activePatternRecipe ?? TEXTURE_PRESETS.find((p) => p.id === selectedTexturePreset)?.recipe}
         initialVerticalPeriod={verticalPeriod}
         activeDepthMap={resolvedDepthMap}
         depthMap={resolvedDepthMap}
