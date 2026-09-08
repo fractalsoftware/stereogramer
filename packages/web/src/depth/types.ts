@@ -98,6 +98,17 @@ export interface DepthEstimationOptions {
    * Default: 'auto' (attempts WebGPU first with graceful fallback to WASM).
    */
   device?: 'auto' | 'webgpu' | 'wasm';
+
+  /**
+   * When true, simulates download and model stages during synthetic runs.
+   * Useful for deterministic UI and E2E testing without large downloads.
+   */
+  simulateProgress?: boolean;
+
+  /**
+   * Simulated delay in milliseconds between pipeline stages during synthetic runs.
+   */
+  syntheticDelayMs?: number;
 }
 
 /**
