@@ -1,4 +1,5 @@
 import type { DepthMap, DepthPipelineOptions, RawImageInput } from './types.js';
+import { toUint8ClampedArray } from './utils.js';
 import { normalizeDepth, validateDepthInvariant } from './normalizer.js';
 import { resampleBilinear } from './resampler.js';
 import { preprocessImage } from './preprocessor.js';
@@ -6,21 +7,6 @@ import { generateSyntheticDepth } from './synthetic.js';
 import {
   getOrCreateModelPipeline,
   inferDepthFromModel,
-} from './model.js';
-
-export { normalizeDepth, validateDepthInvariant } from './normalizer.js';
-export { resampleBilinear, resampleRgba } from './resampler.js';
-export { preprocessImage, computeAspectFitDimensions } from './preprocessor.js';
-export { generateSyntheticDepth } from './synthetic.js';
-export {
-  createDepthModelPipeline,
-  getOrCreateModelPipeline,
-  resetModelPipeline,
-  inferDepthFromModel,
-  configureTransformersEnv,
-  DEFAULT_DEPTH_MODEL,
-  DEFAULT_MODEL_DTYPE,
-  DEFAULT_EXECUTION_DEVICE,
 } from './model.js';
 
 /**
@@ -49,12 +35,7 @@ export async function runDepthPipeline(
     );
   }
 
-  const rawBytes =
-    image.data instanceof ArrayBuffer
-      ? new Uint8ClampedArray(image.data)
-      : image.data instanceof Uint8ClampedArray
-      ? image.data
-      : new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength);
+  const rawBytes = toUint8ClampedArray(image.data);
 
   if (rawBytes.length < image.width * image.height * 4) {
     throw new Error(

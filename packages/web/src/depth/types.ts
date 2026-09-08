@@ -172,9 +172,9 @@ export type DepthProgressCallback = (progress: DepthEstimationProgress) => void;
 export interface NormalizeDepthOptions {
   /** Invert depth polarity (1.0 - z). Default: false. */
   invert?: boolean;
-  /** Explicit minimum disparity value to map to 0.0. When omitted, calculated from input. */
+  /** Explicit minimum elevation or distance value to map to 0.0. When omitted, calculated from input. */
   min?: number;
-  /** Explicit maximum disparity value to map to 1.0. When omitted, calculated from input. */
+  /** Explicit maximum elevation or distance value to map to 1.0. When omitted, calculated from input. */
   max?: number;
 }
 

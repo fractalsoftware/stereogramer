@@ -342,5 +342,111 @@ test.describe('Stereogramer Web Studio E2E', () => {
         });
       }).toBe(presetDepthData);
     });
+
+    test('provides accessible ARIA attributes and screen-reader announcements during inference', async ({ page }) => {
+      await page.goto('/?syntheticDepth=true&syntheticDelay=150');
+      await page.waitForSelector('.canvas-wrapper canvas');
+
+      await page.locator('.mode-tab', { hasText: 'AI Photo' }).click();
+      await page.locator('#ai-photo-input').setInputFiles({
+        name: 'portrait.png',
+        mimeType: 'image/png',
+        buffer: TEST_IMAGE_BUFFER,
+      });
+
+      // Banner should have aria-live and role="status"
+      const progressBanner = page.locator('#ai-progress-banner');
+      await expect(progressBanner).toBeVisible();
+      await expect(progressBanner).toHaveAttribute('aria-live', 'polite');
+      await expect(progressBanner).toHaveAttribute('role', 'status');
+
+      // Progress bar track should have role="progressbar" and numeric bounds
+      const progressBar = page.locator('#ai-progress-bar');
+      await expect(progressBar).toBeVisible();
+      await expect(progressBar).toHaveAttribute('role', 'progressbar');
+      await expect(progressBar).toHaveAttribute('aria-valuemin', '0');
+      await expect(progressBar).toHaveAttribute('aria-valuemax', '100');
+      await expect(progressBar).toHaveAttribute('aria-label', 'Depth estimation progress');
+
+      // Wait for completion
+      await expect(page.locator('#ai-status-text')).toHaveText('Complete', { timeout: 10000 });
+      await expect(progressBar).toHaveAttribute('aria-valuenow', '100');
+    });
+
+    test('renders error banner with Retry and Use Presets recovery actions on failure', async ({ page }) => {
+      // Simulate inference failure
+      await page.goto('/?simulateError=true');
+      await page.waitForSelector('.canvas-wrapper canvas');
+
+      await page.locator('.mode-tab', { hasText: 'AI Photo' }).click();
+      await page.locator('#ai-photo-input').setInputFiles({
+        name: 'failing.png',
+        mimeType: 'image/png',
+        buffer: TEST_IMAGE_BUFFER,
+      });
+
+      // Error banner should appear with alert role and action buttons
+      const errorBanner = page.locator('#ai-error-banner');
+      await expect(errorBanner).toBeVisible();
+      await expect(errorBanner).toHaveAttribute('role', 'alert');
+      await expect(errorBanner).toContainText('WebGPU out of memory or device lost');
+
+      const retryBtn = page.locator('#ai-retry-btn');
+      const presetsBtn = page.locator('#ai-use-presets-btn');
+      await expect(retryBtn).toBeVisible();
+      await expect(presetsBtn).toBeVisible();
+
+      // Click "Use Presets" recovery button
+      await presetsBtn.click();
+
+      // Error banner should be dismissed and depth source reverted to preset
+      await expect(errorBanner).not.toBeVisible();
+      const presetTab = page.locator('.mode-tab', { hasText: 'Presets' });
+      await expect(presetTab).toHaveClass(/active/);
+    });
+
+    test('supports Estimate 3D Depth (AI) toggle switch inside Upload tab', async ({ page }) => {
+      await page.goto('/?syntheticDepth=true');
+      await page.waitForSelector('.canvas-wrapper canvas');
+
+      // Switch to Upload Depth Map tab
+      const uploadTab = page.locator('.mode-tab', { hasText: 'Upload' });
+      await uploadTab.click();
+      await expect(uploadTab).toHaveClass(/active/);
+
+      // Verify AI Depth estimation toggle exists with descriptive tooltip
+      const toggleLabel = page.locator('#upload-ai-depth-toggle-label');
+      await expect(toggleLabel).toBeVisible();
+      await expect(toggleLabel).toHaveAttribute(
+        'title',
+        'Enable to estimate 3D depth from regular 2D photos using in-browser AI, instead of treating as a pre-rendered grayscale depth map'
+      );
+
+      const toggleCheckbox = page.locator('#upload-ai-depth-toggle');
+      await expect(toggleCheckbox).not.toBeChecked();
+
+      // Enable the AI Depth toggle
+      await toggleCheckbox.check();
+      await expect(toggleCheckbox).toBeChecked();
+
+      // Upload image via the upload tab dropzone
+      await page.locator('#upload-depth-input').setInputFiles({
+        name: 'regular-photo.png',
+        mimeType: 'image/png',
+        buffer: TEST_IMAGE_BUFFER,
+      });
+
+      // AI Progress banner should appear in the upload tab and complete
+      const progressBanner = page.locator('#ai-progress-banner');
+      await expect(progressBanner).toBeVisible();
+      await expect(page.locator('#ai-status-text')).toHaveText('Complete', { timeout: 10000 });
+
+      // Verify loaded upload card is visible
+      await expect(page.locator('#upload-depth-card')).toBeVisible();
+
+      // Canvas should be rendered
+      const canvas = page.locator('.canvas-wrapper canvas');
+      await expect(canvas).toBeVisible();
+    });
   });
 });

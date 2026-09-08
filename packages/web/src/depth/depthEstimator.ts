@@ -172,18 +172,3 @@ export function createDepthEstimator(options?: DepthEstimatorOptions): DepthEsti
   return new DepthEstimator(options);
 }
 
-let sharedEstimator: DepthEstimator | null = null;
-
-/**
- * Convenience function to estimate depth using a shared DepthEstimator instance.
- */
-export async function estimateDepth(
-  image: RawImageInput,
-  options?: DepthEstimationOptions,
-  onProgress?: DepthProgressCallback
-): Promise<DepthMap> {
-  if (!sharedEstimator) {
-    sharedEstimator = new DepthEstimator();
-  }
-  return sharedEstimator.estimate(image, options, onProgress);
-}

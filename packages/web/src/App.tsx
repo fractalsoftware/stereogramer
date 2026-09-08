@@ -27,9 +27,9 @@ import {
 type GeneratorMode = 'sirds' | 'textured';
 type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
 
-interface EstimationStatus {
+interface AiProgress {
   stage: string;
-  percentage: number;
+  progress: number;
   message: string;
 }
 
@@ -56,13 +56,14 @@ export const App: React.FC = () => {
   // Pattern / Texture state
   const [selectedTexturePreset, setSelectedTexturePreset] = useState<TexturePresetName>('perlin');
   const [customDepth, setCustomDepth] = useState<UploadedImage | null>(null);
+  const [uploadEstimateAi, setUploadEstimateAi] = useState<boolean>(false);
   const [customPattern, setCustomPattern] = useState<UploadedImage | null>(null);
 
   // AI 2D Photo Depth Estimation state
   const [aiPhoto, setAiPhoto] = useState<UploadedImage | null>(null);
   const [aiBaseDepthMap, setAiBaseDepthMap] = useState<DepthMap | null>(null);
   const [isEstimating, setIsEstimating] = useState<boolean>(false);
-  const [estimationStatus, setEstimationStatus] = useState<EstimationStatus | null>(null);
+  const [aiProgress, setAiProgress] = useState<AiProgress | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const depthEstimatorRef = useRef<DepthEstimator | null>(null);
 
@@ -126,6 +127,9 @@ export const App: React.FC = () => {
     return preset.generate(80, 60);
   }, [customPattern, selectedTexturePreset]);
 
+  // Maximum canvas dimension to downscale before transferring to Web Worker (Task 5)
+  const MAX_IMAGE_DIMENSION = 518;
+
   // Handle image upload from file or drop
   const processImageFile = (
     file: File,
@@ -137,8 +141,28 @@ export const App: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const c = document.createElement('canvas');
-        const targetW = targetDimensions ? targetDimensions.width : img.naturalWidth || img.width;
-        const targetH = targetDimensions ? targetDimensions.height : img.naturalHeight || img.height;
+        let targetW: number;
+        let targetH: number;
+
+        if (targetDimensions) {
+          targetW = targetDimensions.width;
+          targetH = targetDimensions.height;
+        } else {
+          const naturalW = img.naturalWidth || img.width;
+          const naturalH = img.naturalHeight || img.height;
+          targetW = naturalW;
+          targetH = naturalH;
+          if (targetW > MAX_IMAGE_DIMENSION || targetH > MAX_IMAGE_DIMENSION) {
+            if (targetW >= targetH) {
+              targetH = Math.max(1, Math.round((targetH * MAX_IMAGE_DIMENSION) / targetW));
+              targetW = MAX_IMAGE_DIMENSION;
+            } else {
+              targetW = Math.max(1, Math.round((targetW * MAX_IMAGE_DIMENSION) / targetH));
+              targetH = MAX_IMAGE_DIMENSION;
+            }
+          }
+        }
+
         c.width = targetW;
         c.height = targetH;
         const ctx = c.getContext('2d');
@@ -166,20 +190,28 @@ export const App: React.FC = () => {
     e.stopPropagation();
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith('image/')) {
+      const targetDims = uploadEstimateAi ? undefined : { width, height };
       processImageFile(file, (img) => {
         setCustomDepth(img);
         setDepthSource('upload');
-      }, { width, height });
+        if (uploadEstimateAi) {
+          startAiDepthEstimation(img);
+        }
+      }, targetDims);
     }
   };
 
   const handleDepthInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const targetDims = uploadEstimateAi ? undefined : { width, height };
       processImageFile(file, (img) => {
         setCustomDepth(img);
         setDepthSource('upload');
-      }, { width, height });
+        if (uploadEstimateAi) {
+          startAiDepthEstimation(img);
+        }
+      }, targetDims);
     }
   };
 
@@ -207,51 +239,53 @@ export const App: React.FC = () => {
     return depthEstimatorRef.current;
   }, []);
 
-  // Format progress events to user-friendly status and percentage
+  interface StageConfig {
+    minPercentage: number;
+    text: string | ((pct: number) => string);
+  }
+
+  // Declarative stage mapping for progress status and minimum percentages (Task 9)
+  const STAGE_CONFIG_MAP: Record<string, StageConfig> = {
+    'init': {
+      minPercentage: 10,
+      text: 'Initializing WebGPU / WASM...',
+    },
+    'loading-model': {
+      minPercentage: 0,
+      text: (pct) => `Downloading AI Model (${pct}%)...`,
+    },
+    'preprocessing': {
+      minPercentage: 25,
+      text: 'Preprocessing 2D Image...',
+    },
+    'estimating': {
+      minPercentage: 60,
+      text: 'Estimating Depth...',
+    },
+    'normalizing': {
+      minPercentage: 90,
+      text: 'Refining Depth Elevation...',
+    },
+    'resampling': {
+      minPercentage: 90,
+      text: 'Refining Depth Elevation...',
+    },
+    'complete': {
+      minPercentage: 100,
+      text: 'Complete',
+    },
+  };
+
+  // Format progress events to user-friendly status and percentage using declarative mapping
   const formatProgressStatus = (prog: DepthEstimationProgress): { text: string; percentage: number } => {
     let pct = prog.percentage ?? Math.round(prog.progress * 100);
     pct = Math.max(0, Math.min(100, pct));
 
-    if (prog.stage === 'loading-model') {
-      return {
-        text: `Downloading AI Model (${pct}%)...`,
-        percentage: pct,
-      };
-    }
-
-    if (prog.stage === 'init') {
-      return {
-        text: 'Initializing WebGPU / WASM...',
-        percentage: Math.max(pct, 10),
-      };
-    }
-
-    if (prog.stage === 'preprocessing') {
-      return {
-        text: 'Preprocessing 2D Image...',
-        percentage: Math.max(pct, 25),
-      };
-    }
-
-    if (prog.stage === 'estimating') {
-      return {
-        text: 'Estimating Depth...',
-        percentage: Math.max(pct, 60),
-      };
-    }
-
-    if (prog.stage === 'normalizing' || prog.stage === 'resampling') {
-      return {
-        text: 'Refining Depth Elevation...',
-        percentage: Math.max(pct, 90),
-      };
-    }
-
-    if (prog.stage === 'complete') {
-      return {
-        text: 'Complete',
-        percentage: 100,
-      };
+    const config = STAGE_CONFIG_MAP[prog.stage];
+    if (config) {
+      const percentage = Math.max(pct, config.minPercentage);
+      const text = typeof config.text === 'function' ? config.text(pct) : config.text;
+      return { text, percentage };
     }
 
     return {
@@ -269,9 +303,9 @@ export const App: React.FC = () => {
 
     setIsEstimating(true);
     setAiError(null);
-    setEstimationStatus({
+    setAiProgress({
       stage: 'init',
-      percentage: 10,
+      progress: 10,
       message: 'Initializing WebGPU / WASM...',
     });
 
@@ -279,7 +313,12 @@ export const App: React.FC = () => {
       const estimator = getDepthEstimator();
 
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      if (urlParams?.get('simulateError') === 'true' || (window as any).__STEREOGRAMER_SIMULATE_ERROR__ === true) {
+        throw new Error('WebGPU out of memory or device lost');
+      }
       const isSynthetic = urlParams?.get('syntheticDepth') === 'true' || (window as any).__STEREOGRAMER_SYNTHETIC_DEPTH__ === true;
+      // Synthetic fallback is disabled in production (Task 4); only allowed if explicitly enabled
+      const allowSyntheticFallback = urlParams?.get('syntheticFallback') === 'true' || (window as any).__STEREOGRAMER_SYNTHETIC_FALLBACK__ === true;
       const simulateProg = urlParams?.get('simulateProgress') === 'true' || isSynthetic;
       const customDelay = urlParams?.get('syntheticDelay');
       const delayMs = customDelay ? parseInt(customDelay, 10) : (simulateProg ? 80 : undefined);
@@ -296,24 +335,24 @@ export const App: React.FC = () => {
           targetWidth: width,
           targetHeight: height,
           synthetic: isSynthetic,
-          syntheticFallback: true,
+          syntheticFallback: allowSyntheticFallback,
           simulateProgress: simulateProg,
           syntheticDelayMs: delayMs,
         },
         (progress) => {
           const formatted = formatProgressStatus(progress);
-          setEstimationStatus({
+          setAiProgress({
             stage: progress.stage,
-            percentage: formatted.percentage,
+            progress: formatted.percentage,
             message: formatted.text,
           });
         }
       );
 
       setAiBaseDepthMap(depthResult);
-      setEstimationStatus({
+      setAiProgress({
         stage: 'complete',
-        percentage: 100,
+        progress: 100,
         message: 'Complete',
       });
     } catch (err: any) {
@@ -322,7 +361,7 @@ export const App: React.FC = () => {
         return;
       }
       setAiError(err?.message || 'Failed to estimate depth map');
-      setEstimationStatus(null);
+      setAiProgress(null);
     } finally {
       setIsEstimating(false);
     }
@@ -334,8 +373,8 @@ export const App: React.FC = () => {
       depthEstimatorRef.current = null;
     }
     setIsEstimating(false);
-    setEstimationStatus(null);
-    if (!aiBaseDepthMap) {
+    setAiProgress(null);
+    if (depthSource === 'ai' && !aiBaseDepthMap) {
       setAiPhoto(null);
     }
   };
@@ -346,10 +385,139 @@ export const App: React.FC = () => {
       depthEstimatorRef.current = null;
     }
     setIsEstimating(false);
-    setEstimationStatus(null);
+    setAiProgress(null);
     setAiPhoto(null);
     setAiBaseDepthMap(null);
     setAiError(null);
+  };
+
+  const handleClearCustomDepth = () => {
+    setCustomDepth(null);
+    if (uploadEstimateAi) {
+      if (depthEstimatorRef.current) {
+        depthEstimatorRef.current.terminate();
+        depthEstimatorRef.current = null;
+      }
+      setIsEstimating(false);
+      setAiBaseDepthMap(null);
+      setAiProgress(null);
+      setAiError(null);
+    }
+  };
+
+  const handleToggleUploadAi = (checked: boolean) => {
+    setUploadEstimateAi(checked);
+    if (checked) {
+      if (customDepth) {
+        startAiDepthEstimation(customDepth);
+      }
+    } else {
+      setAiProgress(null);
+      setAiError(null);
+    }
+  };
+
+  const handleRetryInference = () => {
+    const targetImage = depthSource === 'upload' ? customDepth : (aiPhoto || customDepth);
+    if (targetImage) {
+      setAiError(null);
+      startAiDepthEstimation(targetImage);
+    }
+  };
+
+  const handleUsePresets = () => {
+    setAiError(null);
+    setDepthSource('preset');
+  };
+
+  // Render in-flight progress banner with screen-reader ARIA announcements (Task 2)
+  const renderAiProgressBanner = () => {
+    if (!aiProgress) return null;
+    return (
+      <div
+        className={`ai-progress-banner ${isEstimating ? 'estimating' : 'complete'}`}
+        id="ai-progress-banner"
+        aria-live="polite"
+        role="status"
+      >
+        <div className="ai-progress-row">
+          <div className="ai-status-indicator">
+            {isEstimating ? (
+              <span className="ai-spinner" aria-hidden="true">⏳</span>
+            ) : (
+              <span className="ai-check" aria-hidden="true">✓</span>
+            )}
+            <span className="ai-status-text" id="ai-status-text">
+              {aiProgress.message}
+            </span>
+          </div>
+          {isEstimating && (
+            <button
+              type="button"
+              className="btn-ai-cancel"
+              id="cancel-ai-inference-btn"
+              onClick={handleCancelInference}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+        <div
+          className="ai-progress-bar-track"
+          id="ai-progress-bar"
+          role="progressbar"
+          aria-valuenow={Math.round(aiProgress.progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Depth estimation progress"
+        >
+          <div
+            className="ai-progress-bar-fill"
+            id="ai-progress-bar-fill"
+            style={{ width: `${aiProgress.progress}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // Render error banner with recovery actions: Retry & Use Presets (Task 3)
+  const renderAiErrorBanner = () => {
+    if (!aiError) return null;
+    return (
+      <div className="ai-error-banner" id="ai-error-banner" role="alert">
+        <div className="ai-error-content">
+          <span className="ai-error-message">⚠️ {aiError}</span>
+          <div className="ai-error-actions">
+            <button
+              type="button"
+              className="btn-ai-retry"
+              id="ai-retry-btn"
+              onClick={handleRetryInference}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="btn-ai-presets"
+              id="ai-use-presets-btn"
+              onClick={handleUsePresets}
+            >
+              Use Presets
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn-icon-clear"
+          onClick={() => setAiError(null)}
+          title="Dismiss error"
+          aria-label="Dismiss error"
+        >
+          ✕
+        </button>
+      </div>
+    );
   };
 
   const handleAiPhotoDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -428,16 +596,28 @@ export const App: React.FC = () => {
       }
       depthMap = { width: aiBaseDepthMap.width, height: aiBaseDepthMap.height, data: floatData };
     } else if (depthSource === 'upload' && customDepth) {
-      const floatData = new Float32Array(width * height);
-      for (let i = 0; i < width * height; i++) {
-        const r = customDepth.data[i * 4]!;
-        const g = customDepth.data[i * 4 + 1]!;
-        const b = customDepth.data[i * 4 + 2]!;
-        let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-        if (invertDepth) lum = 1.0 - lum;
-        floatData[i] = lum;
+      if (uploadEstimateAi && aiBaseDepthMap) {
+        const floatData = new Float32Array(aiBaseDepthMap.data.length);
+        if (invertDepth) {
+          for (let i = 0; i < floatData.length; i++) {
+            floatData[i] = 1.0 - aiBaseDepthMap.data[i]!;
+          }
+        } else {
+          floatData.set(aiBaseDepthMap.data);
+        }
+        depthMap = { width: aiBaseDepthMap.width, height: aiBaseDepthMap.height, data: floatData };
+      } else {
+        const floatData = new Float32Array(width * height);
+        for (let i = 0; i < width * height; i++) {
+          const r = customDepth.data[i * 4]!;
+          const g = customDepth.data[i * 4 + 1]!;
+          const b = customDepth.data[i * 4 + 2]!;
+          let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+          if (invertDepth) lum = 1.0 - lum;
+          floatData[i] = lum;
+        }
+        depthMap = { width, height, data: floatData };
       }
-      depthMap = { width, height, data: floatData };
     } else if (depthSource === 'text') {
       depthMap = rasterizeText(extrudedText || '3D', width, height, {
         fontSize: textFontSize,
@@ -582,6 +762,7 @@ export const App: React.FC = () => {
     blur,
     invertDepth,
     customDepth,
+    uploadEstimateAi,
     aiBaseDepthMap,
     customPattern,
     selectedTexturePreset,
@@ -768,8 +949,23 @@ export const App: React.FC = () => {
           {/* Upload Depth Map Controls */}
           {depthSource === 'upload' && (
             <div className="control-group">
+              <label
+                className="checkbox-label"
+                id="upload-ai-depth-toggle-label"
+                title="Enable to estimate 3D depth from regular 2D photos using in-browser AI, instead of treating as a pre-rendered grayscale depth map"
+                style={{ marginBottom: '0.5rem' }}
+              >
+                <input
+                  type="checkbox"
+                  id="upload-ai-depth-toggle"
+                  checked={uploadEstimateAi}
+                  onChange={(e) => handleToggleUploadAi(e.target.checked)}
+                />
+                Estimate 3D Depth (AI)
+              </label>
+
               {customDepth ? (
-                <div className="dropzone-loaded">
+                <div className="dropzone-loaded" id="upload-depth-card">
                   <div className="dropzone-thumb-wrapper">
                     <img src={customDepth.thumbUrl} alt="Depth map" className="dropzone-thumb" />
                     <div className="dropzone-file-info">
@@ -778,9 +974,11 @@ export const App: React.FC = () => {
                     </div>
                   </div>
                   <button
+                    type="button"
                     className="btn-icon-clear"
+                    id="clear-upload-depth-btn"
                     title="Remove uploaded depth map"
-                    onClick={() => setCustomDepth(null)}
+                    onClick={handleClearCustomDepth}
                   >
                     ✕
                   </button>
@@ -788,11 +986,13 @@ export const App: React.FC = () => {
               ) : (
                 <div
                   className="dropzone"
-                  onDragOver={(e) => e.preventDefault()}
+                  id="upload-depth-dropzone"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                   onDrop={handleDepthDrop}
                 >
                   <input
                     type="file"
+                    id="upload-depth-input"
                     accept="image/*"
                     onChange={handleDepthInput}
                     title="Upload depth map image"
@@ -804,6 +1004,11 @@ export const App: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Progress and error feedback for upload AI estimation */}
+              {uploadEstimateAi && renderAiProgressBanner()}
+              {uploadEstimateAi && renderAiErrorBanner()}
+
               {customDepth && (
                 <label className="checkbox-label" style={{ marginTop: '0.25rem' }}>
                   <input
@@ -863,57 +1068,10 @@ export const App: React.FC = () => {
               )}
 
               {/* In-Flight Inference / Progress Feedback Banner */}
-              {estimationStatus && (
-                <div
-                  className={`ai-progress-banner ${isEstimating ? 'estimating' : 'complete'}`}
-                  id="ai-progress-banner"
-                >
-                  <div className="ai-progress-row">
-                    <div className="ai-status-indicator">
-                      {isEstimating ? (
-                        <span className="ai-spinner" aria-hidden="true">⏳</span>
-                      ) : (
-                        <span className="ai-check" aria-hidden="true">✓</span>
-                      )}
-                      <span className="ai-status-text" id="ai-status-text">
-                        {estimationStatus.message}
-                      </span>
-                    </div>
-                    {isEstimating && (
-                      <button
-                        type="button"
-                        className="btn-ai-cancel"
-                        id="cancel-ai-inference-btn"
-                        onClick={handleCancelInference}
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                  <div className="ai-progress-bar-track">
-                    <div
-                      className="ai-progress-bar-fill"
-                      id="ai-progress-bar-fill"
-                      style={{ width: `${estimationStatus.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+              {renderAiProgressBanner()}
 
               {/* Error banner if inference fails */}
-              {aiError && (
-                <div className="ai-error-banner" id="ai-error-banner">
-                  <span>⚠️ {aiError}</span>
-                  <button
-                    type="button"
-                    className="btn-icon-clear"
-                    onClick={() => setAiError(null)}
-                    title="Dismiss error"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+              {renderAiErrorBanner()}
 
               {/* Live Invert Depth Polarity Toggle for AI Photo */}
               {aiPhoto && aiBaseDepthMap && (

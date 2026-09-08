@@ -1,4 +1,5 @@
 export * from './types.js';
+export * from './utils.js';
 export * from './normalizer.js';
 export * from './resampler.js';
 export * from './preprocessor.js';
