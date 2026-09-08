@@ -86,10 +86,20 @@ export interface SirdsOptions {
 export type SirdsPaletteName = 'bw' | 'grayscale' | 'rgb' | 'duotone';
 
 /**
+ * Procedural generator algorithm types for autostereogram substrates.
+ */
+export type PatternGeneratorType =
+  | 'perlin'
+  | 'voronoi'
+  | 'checker'
+  | 'stripes'
+  | 'mosaic';
+
+/**
  * Options for generating seamless procedural Perlin noise textures.
  */
 export interface PerlinTextureOptions {
-  /** Frequency / feature scale. Default: 16. */
+  /** Frequency / feature scale. Default: 4. */
   scale?: number;
   /** Octaves of noise summation. Default: 3. */
   octaves?: number;
@@ -97,19 +107,92 @@ export interface PerlinTextureOptions {
   colorA?: RgbaColor;
   /** Background / secondary color. Default: [15, 23, 42, 255] (slate dark). */
   colorB?: RgbaColor;
+  /** Random seed for procedural variations. Default: 100. */
+  seed?: number;
 }
 
 /**
  * Options for generating seamless procedural Voronoi cellular textures.
  */
 export interface VoronoiTextureOptions {
-  /** Number of cell seed centers. Default: 18. */
+  /** Number of cell seed centers. Default: 16. */
   numCells?: number;
+  /** Alias for numCells (cell center count). */
+  count?: number;
   /** Cell interior color. Default: [236, 72, 153, 255] (pink). */
   colorA?: RgbaColor;
   /** Cell boundary edge color. Default: [30, 41, 59, 255] (slate). */
   colorB?: RgbaColor;
+  /** Random seed for cell center placement. Default: 0. */
+  seed?: number;
 }
+
+/**
+ * Options for generating procedural checkerboard tile textures.
+ */
+export interface CheckerTextureOptions {
+  /** Size of each square cell in pixels. Default: 10. */
+  cellSize?: number;
+  /** Feature scale (alias for cellSize). */
+  scale?: number;
+  /** Primary square color. Default: [56, 189, 248, 255] (sky cyan). */
+  colorA?: RgbaColor;
+  /** Secondary square color. Default: [30, 41, 59, 255] (slate dark). */
+  colorB?: RgbaColor;
+  /** Random seed for procedural variation. Default: 0. */
+  seed?: number;
+}
+
+/**
+ * Options for generating procedural color stripe textures.
+ */
+export interface StripesTextureOptions {
+  /** Width of each stripe band in pixels. Default: 10. */
+  stripeWidth?: number;
+  /** Feature scale / stripe width (alias for stripeWidth). */
+  scale?: number;
+  /** Cell size (alias for stripeWidth). */
+  cellSize?: number;
+  /** Palette of colors for the stripe bands. */
+  colors?: RgbaColor[];
+  /** Primary color (used if colors array is omitted). */
+  colorA?: RgbaColor;
+  /** Secondary color (used if colors array is omitted). */
+  colorB?: RgbaColor;
+  /** Stripe orientation: 'vertical' (standard for autostereograms) or 'horizontal'. Default: 'vertical'. */
+  direction?: 'vertical' | 'horizontal';
+  /** Random seed for phase / color variation. Default: 0. */
+  seed?: number;
+}
+
+/**
+ * Options for generating procedural dot mosaic textures.
+ */
+export interface MosaicTextureOptions {
+  /** Grid cell dimension in pixels. Default: 20. */
+  cellSize?: number;
+  /** Dot radius in pixels. Default: 7. */
+  dotRadius?: number;
+  /** Feature scale (alias for cellSize). */
+  scale?: number;
+  /** Dot foreground color. Default: [236, 72, 153, 255] (pink). */
+  colorA?: RgbaColor;
+  /** Background color. Default: [15, 23, 42, 255] (slate dark). */
+  colorB?: RgbaColor;
+  /** Random seed for procedural variation. Default: 0. */
+  seed?: number;
+}
+
+/**
+ * Canonical discriminated union representing a declarative procedural substrate recipe.
+ * Synchronized dynamically with Pattern Separation.
+ */
+export type PatternRecipe =
+  | ({ type: 'perlin' } & PerlinTextureOptions)
+  | ({ type: 'voronoi' } & VoronoiTextureOptions)
+  | ({ type: 'checker' } & CheckerTextureOptions)
+  | ({ type: 'stripes' } & StripesTextureOptions)
+  | ({ type: 'mosaic' } & MosaicTextureOptions);
 
 /**
  * Configuration options for generating a Textured Single Image Stereogram (Textured SIS).

@@ -68,5 +68,14 @@ _Avoid_: Depth direction, height sign
 The ease with which human binocular vision can converge disparate pattern elements into a coherent, non-diplopic three-dimensional percept.
 _Avoid_: Viewability, 3D lock
 
+**Pattern Tile**:
+The discrete two-dimensional graphical substrate block repeated across the horizontal and vertical axes of a Textured SIS.
+_Avoid_: Texture patch, repeat unit, background slice
 
+**Toroidal Seamlessness**:
+A boundary continuity property where the opposing edges of a visual substrate seamlessly interpolate with one another across both axes, preventing perceptual seam discontinuities when tiled.
+_Avoid_: Wrap-around continuity, edge blending, seamless tiling
 
+**Pattern Recipe**:
+A declarative, resolution-independent parameter specification (generator type, frequency, seed, and color mappings) that synthesizes a Pattern Tile deterministically on demand.
+_Avoid_: Pattern config, texture settings, preset definition

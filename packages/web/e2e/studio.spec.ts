@@ -449,4 +449,398 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(canvas).toBeVisible();
     });
   });
+
+  test.describe('Texture Studio (Pattern Procedural Synthesis & Toroidal Inspector)', () => {
+    test('opens Texture Studio from sidebar, explores generator tabs, and verifies accessible dialog semantics', async ({ page }) => {
+      // Open Texture Studio via sidebar button
+      const openBtn = page.locator('#open-texture-studio-btn');
+      await expect(openBtn).toBeVisible();
+      await openBtn.click();
+
+      // Check modal overlay and dialog attributes
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('aria-modal', 'true');
+      await expect(dialog).toHaveAttribute('aria-labelledby', 'pattern-studio-title');
+      await expect(page.locator('#pattern-studio-title')).toHaveText('Texture Studio');
+
+      // Verify default 1x and 3x3 dimension badges
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 80 px');
+      await expect(page.locator('#pattern-3x-badge')).toHaveText('240 × 240 px');
+
+      // Switch generator tabs and verify tailored controls appear
+      // Voronoi
+      await page.click('#generator-tab-voronoi');
+      await expect(page.locator('#voronoi-cells-range')).toBeVisible();
+
+      // Checkerboard
+      await page.click('#generator-tab-checker');
+      await expect(page.locator('#checker-cell-range')).toBeVisible();
+
+      // Stripes
+      await page.click('#generator-tab-stripes');
+      await expect(page.locator('#stripes-width-range')).toBeVisible();
+      await expect(page.locator('#stripes-direction-select')).toBeVisible();
+
+      // Mosaic
+      await page.click('#generator-tab-mosaic');
+      await expect(page.locator('#mosaic-cell-range')).toBeVisible();
+      await expect(page.locator('#mosaic-radius-range')).toBeVisible();
+
+      // Perlin
+      await page.click('#generator-tab-perlin');
+      await expect(page.locator('#perlin-scale-range')).toBeVisible();
+      await expect(page.locator('#perlin-octaves-range')).toBeVisible();
+
+      // Verify Escape key closes dialog
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test('opens Texture Studio from preset drawer and closes via Cancel button', async ({ page }) => {
+      // Open preset drawer
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      // Click Texture Studio button inside drawer
+      const drawerStudioBtn = page.locator('#drawer-open-texture-studio-btn');
+      await expect(drawerStudioBtn).toBeVisible();
+      await drawerStudioBtn.click();
+
+      // Drawer should close and modal should open
+      await expect(drawer).not.toBeVisible();
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Close via Cancel button
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test('adjusts vertical period slider and inspects 3x3 repetition grid zoom controls', async ({ page }) => {
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Adjust vertical period slider to 120px
+      const vPeriodRange = page.locator('#vertical-period-range');
+      await vPeriodRange.fill('120');
+
+      // Badges should update in real-time
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 120 px');
+      await expect(page.locator('#pattern-3x-badge')).toHaveText('240 × 360 px');
+
+      // Test 3x3 repetition zoom controls
+      const zoomIndicator = page.locator('#grid-zoom-indicator');
+      await expect(zoomIndicator).toHaveText('100%');
+
+      // Zoom in
+      await page.locator('.grid-toolbar button[title="Zoom In"]').click();
+      await expect(zoomIndicator).toHaveText('125%');
+
+      // Zoom out
+      await page.locator('.grid-toolbar button[title="Zoom Out"]').click();
+      await expect(zoomIndicator).toHaveText('100%');
+
+      // Test seed shuffle button
+      const seedInput = page.locator('#recipe-seed-input');
+      const initialSeed = await seedInput.inputValue();
+      await page.click('#recipe-seed-random-btn');
+      const randomizedSeed = await seedInput.inputValue();
+      expect(randomizedSeed).not.toEqual(initialSeed);
+
+      // Reset to defaults
+      await page.click('#pattern-studio-reset-btn');
+      await expect(page.locator('#pattern-1x-badge')).toHaveText('80 × 80 px');
+
+      await page.click('#pattern-studio-cancel-btn');
+    });
+
+    test('applies custom Voronoi pattern to stereogram and reverts to standard preset', async ({ page }) => {
+      await page.click('#open-texture-studio-btn');
+
+      // Switch to Voronoi and customize
+      await page.click('#generator-tab-voronoi');
+      await page.locator('#voronoi-cells-range').fill('24');
+      await page.locator('#vertical-period-range').fill('96');
+
+      // Click Apply Pattern
+      await page.click('#pattern-studio-apply-btn');
+
+      // Modal closes
+      await expect(page.locator('div[role="dialog"]')).not.toBeVisible();
+
+      // Sidebar shows active custom recipe card
+      const customCard = page.locator('.custom-recipe-active-card');
+      await expect(customCard).toBeVisible();
+      await expect(customCard).toContainText('Custom Recipe');
+      await expect(customCard).toContainText('VORONOI');
+      await expect(customCard).toContainText('80 × 96 px');
+
+      // Main stereogram canvas remains visible and updated
+      const canvas = page.locator('.canvas-wrapper canvas');
+      await expect(canvas).toBeVisible();
+
+      // Clear custom recipe back to standard preset
+      await page.click('#clear-custom-recipe-btn');
+      await expect(customCard).not.toBeVisible();
+      await expect(page.locator('#texture-preset-select')).toBeVisible();
+    });
+
+    test('renders instant 3D fusibility mini-stereogram testbed, toggles reference scene & guide dots, and reflects convergence mode', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // 2. Locate 3D Fusibility Testbed card and badges
+      const testbedCard = page.locator('.testbed-card');
+      await expect(testbedCard).toBeVisible();
+      await expect(page.locator('#testbed-fusibility-badge')).toHaveText('Binocular Fusibility');
+      await expect(page.locator('#testbed-dimension-badge')).toHaveText('240 × 160 px');
+      await expect(page.locator('#testbed-convergence-badge')).toHaveText('Parallel');
+      await expect(page.locator('#testbed-sep-badge')).toHaveText('Sep: 30px');
+
+      // 3. Verify 240×160 Testbed Canvas is rendered
+      const testbedCanvas = page.locator('#testbed-stereogram-canvas');
+      await expect(testbedCanvas).toBeVisible();
+      await expect(testbedCanvas).toHaveAttribute('width', '240');
+      await expect(testbedCanvas).toHaveAttribute('height', '160');
+
+      // 4. Verify Convergence Guide Dots overlay and toggle
+      const guideDotsOverlay = page.locator('.testbed-guide-dots-overlay');
+      await expect(guideDotsOverlay).toBeVisible();
+      const guideDots = page.locator('.testbed-guide-dot');
+      await expect(guideDots).toHaveCount(2);
+
+      const guideDotsCheckbox = page.locator('#testbed-guide-dots-checkbox');
+      await expect(guideDotsCheckbox).toBeChecked();
+
+      // Toggle guide dots off
+      await guideDotsCheckbox.uncheck();
+      await expect(guideDotsOverlay).not.toBeVisible();
+
+      // Toggle guide dots back on
+      await guideDotsCheckbox.check();
+      await expect(guideDotsOverlay).toBeVisible();
+
+      // 5. Test Reference Scene Selector (Benchmark Sphere vs Active Project Depth Map)
+      const benchmarkBtn = page.locator('#testbed-scene-benchmark-btn');
+      const projectBtn = page.locator('#testbed-scene-project-btn');
+
+      await expect(benchmarkBtn).toHaveClass(/active/);
+      await expect(projectBtn).not.toHaveClass(/active/);
+
+      // Switch to Active Project Depth Map
+      await projectBtn.click();
+      await expect(projectBtn).toHaveClass(/active/);
+      await expect(benchmarkBtn).not.toHaveClass(/active/);
+
+      // Switch back to Benchmark Sphere
+      await benchmarkBtn.click();
+      await expect(benchmarkBtn).toHaveClass(/active/);
+      await expect(projectBtn).not.toHaveClass(/active/);
+
+      // 6. Test interaction when scrubbing recipe parameters
+      await page.click('#generator-tab-voronoi');
+      await page.locator('#voronoi-cells-range').fill('32');
+      await expect(testbedCanvas).toBeVisible();
+
+      // Close modal
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // 7. Toggle convergence mode in sidebar to Cross-eyed
+      const crossTab = page.locator('.mode-tab', { hasText: 'Cross-eyed' });
+      await crossTab.click();
+      await expect(crossTab).toHaveClass(/active/);
+
+      // Reopen Texture Studio and assert convergence mode badge updates to Cross-eyed
+      await page.click('#open-texture-studio-btn');
+      await expect(dialog).toBeVisible();
+      await expect(page.locator('#testbed-convergence-badge')).toHaveText('Cross-eyed');
+
+      // Close modal to cleanup
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
+  });
+
+  test.describe('Dynamic Separation Sync, Preset Library & JSON Sharing (Ticket 19)', () => {
+    test('dynamically synchronizes pattern tile width with separation slider for custom recipes and presets', async ({ page }) => {
+      // 1. Open Texture Studio, create a Voronoi recipe and apply it
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      await page.click('#generator-tab-voronoi');
+      await page.click('#pattern-studio-apply-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // Verify active recipe banner in sidebar shows custom recipe
+      const recipeCard = page.locator('.custom-recipe-active-card');
+      await expect(recipeCard).toBeVisible();
+      await expect(recipeCard).toContainText('Custom Recipe');
+      await expect(recipeCard).toContainText('VORONOI');
+      await expect(recipeCard).toContainText('80 × 80 px');
+
+      // 2. Adjust separation slider to 96px
+      const sepRange = page.locator('#separation-range');
+      await sepRange.fill('96');
+      await expect(page.locator('label[for="separation-range"] .val')).toHaveText('96px');
+
+      // Assert that custom recipe dimensions dynamically synchronized to 96px without phase jumps
+      await expect(recipeCard).toContainText('96 × 80 px');
+
+      // 3. Switch to a built-in procedural preset via Preset Drawer
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      const perlinCard = page.locator('.preset-card', { hasText: 'Perlin Cloud Waves' });
+      await expect(perlinCard).toBeVisible();
+      await perlinCard.click();
+      await expect(drawer).not.toBeVisible();
+
+      // 4. Adjust separation slider again to 110px
+      await sepRange.fill('110');
+      await expect(page.locator('label[for="separation-range"] .val')).toHaveText('110px');
+
+      // Stereogram canvas should remain visible and updated
+      const canvas = page.locator('.canvas-wrapper canvas');
+      await expect(canvas).toBeVisible();
+    });
+
+    test('saves custom recipe to localStorage library and applies/deletes from Preset Drawer', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // 2. Select Mosaic generator, configure name and save to library
+      await page.click('#generator-tab-mosaic');
+      const nameInput = page.locator('#pattern-recipe-name-input');
+      await nameInput.fill('Emerald Mosaic');
+
+      await page.click('#pattern-studio-save-library-btn');
+      const feedback = page.locator('#pattern-studio-feedback');
+      await expect(feedback).toBeVisible();
+      await expect(feedback).toContainText('Saved "Emerald Mosaic" to library!');
+
+      // Close modal
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+
+      // 3. Open Preset Drawer and assert Custom Patterns section contains "Emerald Mosaic"
+      await page.click('#preset-drawer-trigger');
+      const drawer = page.locator('.drawer-panel');
+      await expect(drawer).toBeVisible();
+
+      const customCard = page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' });
+      await expect(customCard).toBeVisible();
+      await expect(customCard.locator('.custom-badge')).toHaveText('MOSAIC');
+      await expect(customCard.locator('.pattern-thumb-canvas')).toBeVisible();
+
+      // 4. Click Apply on custom pattern card
+      const applyBtn = customCard.locator('.apply-custom-pattern-btn');
+      await applyBtn.click();
+      await expect(drawer).not.toBeVisible();
+
+      // Verify active recipe banner in sidebar
+      const recipeCard = page.locator('.custom-recipe-active-card');
+      await expect(recipeCard).toBeVisible();
+      await expect(recipeCard).toContainText('Custom Recipe');
+      await expect(recipeCard).toContainText('MOSAIC');
+
+      // 5. Re-open Preset Drawer and delete custom pattern
+      await page.click('#preset-drawer-trigger');
+      await expect(drawer).toBeVisible();
+
+      const deleteBtn = page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' }).locator('.delete-custom-pattern-btn');
+      await deleteBtn.click();
+
+      // Assert pattern is removed and empty note is shown
+      await expect(page.locator('.custom-pattern-card', { hasText: 'Emerald Mosaic' })).not.toBeVisible();
+      await expect(page.locator('.preset-empty-note')).toBeVisible();
+
+      // Close drawer
+      await page.click('.btn-close-drawer');
+      await expect(drawer).not.toBeVisible();
+    });
+
+    test('downloads tile PNG and exports/imports recipe JSON with live preview update', async ({ page }) => {
+      // 1. Open Texture Studio
+      await page.click('#open-texture-studio-btn');
+      const dialog = page.locator('div[role="dialog"]');
+      await expect(dialog).toBeVisible();
+
+      // Select Checker generator
+      await page.click('#generator-tab-checker');
+      await page.locator('#pattern-recipe-name-input').fill('Geometric Checker');
+
+      // 2. Test Download Tile PNG
+      const pngDownloadPromise = page.waitForEvent('download');
+      await page.click('#pattern-studio-download-png-btn');
+      const pngDownload = await pngDownloadPromise;
+      expect(pngDownload.suggestedFilename()).toMatch(/^pattern-checker-\d+x\d+\.png$/);
+
+      // 3. Test Export Recipe JSON
+      const jsonDownloadPromise = page.waitForEvent('download');
+      await page.click('#pattern-studio-export-json-btn');
+      const jsonDownload = await jsonDownloadPromise;
+      expect(jsonDownload.suggestedFilename()).toMatch(/^pattern-geometric-checker\.json$/);
+
+      // 4. Test Import Recipe JSON (Valid stripes payload)
+      const validJsonPayload = JSON.stringify({
+        name: 'Cyberpunk Neon Stripes',
+        verticalPeriod: 96,
+        recipe: {
+          type: 'stripes',
+          stripeWidth: 16,
+          colors: [
+            [255, 0, 128, 255],
+            [0, 255, 255, 255],
+          ],
+        },
+      });
+
+      await page.setInputFiles('#pattern-studio-import-json-input', {
+        name: 'cyberpunk-stripes.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(validJsonPayload),
+      });
+
+      // Verify that controls update live: stripes tab selected, name updated, feedback banner displayed
+      await expect(page.locator('#generator-tab-stripes')).toHaveClass(/active/);
+      await expect(page.locator('#pattern-recipe-name-input')).toHaveValue('Cyberpunk Neon Stripes');
+      await expect(page.locator('#vertical-period-range')).toHaveValue('96');
+      await expect(page.locator('#pattern-studio-feedback')).toContainText('Loaded recipe "Cyberpunk Neon Stripes"');
+
+      // 5. Test Import Recipe JSON with invalid schema (error handling)
+      const invalidJsonPayload = JSON.stringify({
+        name: 'Malformed Recipe',
+        recipe: {
+          type: 'perlin',
+          scale: -99, // invalid scale
+        },
+      });
+
+      await page.setInputFiles('#pattern-studio-import-json-input', {
+        name: 'invalid-recipe.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(invalidJsonPayload),
+      });
+
+      // Verify error banner is rendered
+      const errorBanner = page.locator('#pattern-studio-error');
+      await expect(errorBanner).toBeVisible();
+      await expect(errorBanner).toContainText('Invalid pattern recipe');
+
+      // Close modal to cleanup
+      await page.click('#pattern-studio-cancel-btn');
+      await expect(dialog).not.toBeVisible();
+    });
+  });
 });
+
