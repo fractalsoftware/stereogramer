@@ -347,6 +347,7 @@ describe('End-to-End Depth Pipeline (pipeline.ts)', () => {
     const progresses: number[] = [];
 
     const result = await runDepthPipeline(img, {
+      synthetic: true,
       targetWidth: 160,
       targetHeight: 120,
       onProgress: (stage, progress) => {
@@ -398,6 +399,7 @@ describe('Depth Worker Message Protocol (depth-estimation.worker.ts)', () => {
       type: ESTIMATE_DEPTH,
       image: img,
       options: {
+        synthetic: true,
         targetWidth: 80,
         targetHeight: 60,
       },
@@ -498,7 +500,7 @@ describe('DepthEstimator Client Helper (depthEstimator.ts)', () => {
 
     const depthMap = await estimator.estimate(
       img,
-      { targetWidth: 80, targetHeight: 80 },
+      { synthetic: true, targetWidth: 80, targetHeight: 80 },
       (p) => progressList.push(p.progress)
     );
 
@@ -539,8 +541,8 @@ describe('DepthEstimator Client Helper (depthEstimator.ts)', () => {
     const imgB = createTestImage(30, 30);
 
     const [mapA, mapB] = await Promise.all([
-      estimator.estimate(imgA, { targetWidth: 50, targetHeight: 50 }),
-      estimator.estimate(imgB, { targetWidth: 60, targetHeight: 60 }),
+      estimator.estimate(imgA, { synthetic: true, targetWidth: 50, targetHeight: 50 }),
+      estimator.estimate(imgB, { synthetic: true, targetWidth: 60, targetHeight: 60 }),
     ]);
 
     expect(mapA.width).toBe(50);

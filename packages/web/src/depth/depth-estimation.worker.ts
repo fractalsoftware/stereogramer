@@ -32,6 +32,7 @@ export async function handleDepthWorkerMessage(
       type: PROGRESS,
       stage,
       progress,
+      percentage: stage === 'loading-model' ? progress : Math.round(progress * 100),
       message,
     };
     postMessage(progressMsg);

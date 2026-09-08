@@ -3,17 +3,31 @@ import { normalizeDepth, validateDepthInvariant } from './normalizer.js';
 import { resampleBilinear } from './resampler.js';
 import { preprocessImage } from './preprocessor.js';
 import { generateSyntheticDepth } from './synthetic.js';
+import {
+  getOrCreateModelPipeline,
+  inferDepthFromModel,
+} from './model.js';
 
 export { normalizeDepth, validateDepthInvariant } from './normalizer.js';
 export { resampleBilinear, resampleRgba } from './resampler.js';
 export { preprocessImage, computeAspectFitDimensions } from './preprocessor.js';
 export { generateSyntheticDepth } from './synthetic.js';
+export {
+  createDepthModelPipeline,
+  getOrCreateModelPipeline,
+  resetModelPipeline,
+  inferDepthFromModel,
+  configureTransformersEnv,
+  DEFAULT_DEPTH_MODEL,
+  DEFAULT_MODEL_DTYPE,
+  DEFAULT_EXECUTION_DEVICE,
+} from './model.js';
 
 /**
  * Runs the end-to-end depth estimation pipeline.
  *
  * 1. Preprocesses the input image to the target model resolution while preserving aspect ratio.
- * 2. Executes depth estimation (synthetic fallback for Ticket 1 / offline mode).
+ * 2. Executes depth estimation via Transformers.js ONNX runtime (or synthetic fallback).
  * 3. Enforces strict min-max normalization into [0.0, 1.0] Depth Polarity bounds.
  * 4. Bilinearly resamples the elevation field to match requested target dimensions.
  * 5. Dispatches fine-grained progress updates at each stage.
@@ -45,7 +59,7 @@ export async function runDepthPipeline(
     );
   }
 
-  onProgress?.('preprocessing', 0.2, 'Preprocessing input image...');
+  onProgress?.('preprocessing', 0.15, 'Preprocessing input image...');
 
   const modelResolution = options.modelResolution ?? 518;
   const preprocessed = preprocessImage(
@@ -57,27 +71,72 @@ export async function runDepthPipeline(
     modelResolution
   );
 
-  onProgress?.('estimating', 0.5, 'Estimating depth elevation field...');
+  let rawDepthData: Float32Array;
+  let sourceWidth: number;
+  let sourceHeight: number;
 
-  // Ticket 1: deterministic synthetic depth elevation field
-  // (In Ticket 2, this hooks into the Transformers.js ONNX runtime)
-  const syntheticResult = generateSyntheticDepth(preprocessed, {
-    mode: options.syntheticMode ?? 'hybrid',
+  const isSynthetic = options.synthetic === true;
+  const allowSyntheticFallback = options.syntheticFallback === true;
+
+  if (isSynthetic) {
+    onProgress?.('estimating', 0.5, 'Estimating depth elevation field (synthetic)...');
+    const syntheticResult = generateSyntheticDepth(preprocessed, {
+      mode: options.syntheticMode ?? 'hybrid',
+      invert: false, // Inversion handled uniformly during normalization
+    });
+    rawDepthData = syntheticResult.data;
+    sourceWidth = syntheticResult.width;
+    sourceHeight = syntheticResult.height;
+  } else {
+    try {
+      let pipelineInstance = options.modelPipeline;
+      if (!pipelineInstance) {
+        pipelineInstance = await getOrCreateModelPipeline({
+          model: options.modelId,
+          dtype: options.dtype,
+          device: options.device,
+          onProgress,
+          pipelineFactory: options.pipelineFactory,
+        });
+      }
+
+      onProgress?.('estimating', 0.6, 'Estimating depth elevation field (Transformers.js)...');
+      const modelResult = await inferDepthFromModel(pipelineInstance, preprocessed);
+      rawDepthData = modelResult.rawDepth;
+      sourceWidth = modelResult.width;
+      sourceHeight = modelResult.height;
+    } catch (modelError) {
+      if (allowSyntheticFallback) {
+        console.warn(
+          'Transformers depth model failed, falling back to synthetic generator:',
+          modelError
+        );
+        onProgress?.('estimating', 0.5, 'Estimating depth elevation field (synthetic fallback)...');
+        const fallbackResult = generateSyntheticDepth(preprocessed, {
+          mode: options.syntheticMode ?? 'hybrid',
+          invert: false,
+        });
+        rawDepthData = fallbackResult.data;
+        sourceWidth = fallbackResult.width;
+        sourceHeight = fallbackResult.height;
+      } else {
+        throw modelError;
+      }
+    }
+  }
+
+  onProgress?.('normalizing', 0.85, 'Normalizing depth map to [0.0, 1.0] bounds...');
+
+  let normalizedData = normalizeDepth(rawDepthData, {
     invert: options.invert ?? false,
-  });
-
-  onProgress?.('normalizing', 0.8, 'Normalizing depth map to [0.0, 1.0] bounds...');
-
-  let normalizedData = normalizeDepth(syntheticResult.data, {
-    invert: false, // Inversion already handled in estimation step if requested
   });
 
   if (!validateDepthInvariant(normalizedData)) {
     throw new Error('Depth normalization invariant violation: values outside [0.0, 1.0]');
   }
 
-  let finalWidth = syntheticResult.width;
-  let finalHeight = syntheticResult.height;
+  let finalWidth = sourceWidth;
+  let finalHeight = sourceHeight;
 
   const targetW = options.targetWidth;
   const targetH = options.targetHeight;
@@ -89,7 +148,7 @@ export async function runDepthPipeline(
     targetH > 0 &&
     (targetW !== finalWidth || targetH !== finalHeight)
   ) {
-    onProgress?.('resampling', 0.9, `Resampling depth map to ${targetW}x${targetH}...`);
+    onProgress?.('resampling', 0.95, `Resampling depth map to ${targetW}x${targetH}...`);
     normalizedData = resampleBilinear(normalizedData, finalWidth, finalHeight, targetW, targetH);
     finalWidth = targetW;
     finalHeight = targetH;

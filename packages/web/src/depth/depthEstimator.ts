@@ -57,10 +57,14 @@ export class DepthEstimator {
       if (this.options.workerFactory) {
         this.worker = this.options.workerFactory();
       } else if (typeof Worker !== 'undefined') {
-        const url =
-          this.options.workerUrl ??
-          new URL('./depth-estimation.worker.ts', import.meta.url);
-        this.worker = new Worker(url, { type: 'module' });
+        if (this.options.workerUrl) {
+          this.worker = new Worker(this.options.workerUrl, { type: 'module' });
+        } else {
+          this.worker = new Worker(
+            new URL('./depth-estimation.worker.ts', import.meta.url),
+            { type: 'module' }
+          );
+        }
       } else {
         throw new Error(
           'Web Workers are not available in this environment. Provide a custom workerFactory or run in a browser.'
