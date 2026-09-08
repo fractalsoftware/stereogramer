@@ -37,8 +37,11 @@ export async function runDepthPipeline(
   options: DepthPipelineOptions = {}
 ): Promise<DepthMap> {
   const { onProgress } = options;
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const delay = options.syntheticDelayMs && options.syntheticDelayMs > 0 ? options.syntheticDelayMs : 0;
 
   onProgress?.('init', 0.05, 'Initializing depth pipeline...');
+  if (delay > 0) await sleep(delay);
 
   if (!image || image.width <= 0 || image.height <= 0) {
     throw new Error(
@@ -60,6 +63,7 @@ export async function runDepthPipeline(
   }
 
   onProgress?.('preprocessing', 0.15, 'Preprocessing input image...');
+  if (delay > 0) await sleep(delay);
 
   const modelResolution = options.modelResolution ?? 518;
   const preprocessed = preprocessImage(
@@ -79,7 +83,16 @@ export async function runDepthPipeline(
   const allowSyntheticFallback = options.syntheticFallback === true;
 
   if (isSynthetic) {
+    if (options.simulateProgress) {
+      onProgress?.('loading-model', 45, 'Downloading model weights (45%)...');
+      if (delay > 0) await sleep(delay);
+      onProgress?.('loading-model', 100, 'Model download complete');
+      if (delay > 0) await sleep(delay);
+    }
+
     onProgress?.('estimating', 0.5, 'Estimating depth elevation field (synthetic)...');
+    if (delay > 0) await sleep(delay);
+
     const syntheticResult = generateSyntheticDepth(preprocessed, {
       mode: options.syntheticMode ?? 'hybrid',
       invert: false, // Inversion handled uniformly during normalization
@@ -126,6 +139,7 @@ export async function runDepthPipeline(
   }
 
   onProgress?.('normalizing', 0.85, 'Normalizing depth map to [0.0, 1.0] bounds...');
+  if (delay > 0) await sleep(delay);
 
   let normalizedData = normalizeDepth(rawDepthData, {
     invert: options.invert ?? false,
