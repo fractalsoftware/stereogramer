@@ -79,3 +79,15 @@ _Avoid_: Wrap-around continuity, edge blending, seamless tiling
 **Pattern Recipe**:
 A declarative, resolution-independent parameter specification (generator type, frequency, seed, and color mappings) that synthesizes a Pattern Tile deterministically on demand.
 _Avoid_: Pattern config, texture settings, preset definition
+
+**Progressive Web App (PWA)**:
+An installable, offline-capable web application delivering app-like performance and native launcher integration via web standards.
+_Avoid_: Hybrid app, web wrapper, native wrapper
+
+**Maskable Icon**:
+An application icon designed with a guaranteed 20% safe zone margin to ensure non-clipped presentation across arbitrary platform-adaptive mask geometries (circles, squircles, rounded squares).
+_Avoid_: Adaptive icon, padded icon
+
+**Tiered Caching Strategy**:
+An architectural caching partition that precaches lightweight core application logic and WASM runtimes immediately upon installation while delegating heavyweight neural network model weights to on-demand runtime caching.
+_Avoid_: Split cache, partial precache
