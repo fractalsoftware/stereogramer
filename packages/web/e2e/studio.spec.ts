@@ -842,5 +842,37 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(dialog).not.toBeVisible();
     });
   });
+
+  test.describe('Brand Identity Icons & Link Tags (Ticket 22)', () => {
+    test('serves brand identity icons with valid headers and DOM head links', async ({ page, request }) => {
+      // Assert presence of icon tags in document head
+      const faviconSvg = page.locator('link[rel="icon"][type="image/svg+xml"]');
+      await expect(faviconSvg).toHaveAttribute('href', '/favicon.svg');
+
+      const faviconIco = page.locator('link[rel="alternate icon"]');
+      await expect(faviconIco).toHaveAttribute('href', '/favicon.ico');
+
+      const appleTouchIcon = page.locator('link[rel="apple-touch-icon"]');
+      await expect(appleTouchIcon).toHaveAttribute('href', '/apple-touch-icon.png');
+
+      // Assert HTTP 200 retrieval for all generated icon assets
+      const iconAssets = [
+        { url: '/favicon.svg', mimeMatch: 'image/svg+xml' },
+        { url: '/favicon.ico', mimeMatch: 'icon' },
+        { url: '/apple-touch-icon.png', mimeMatch: 'image/png' },
+        { url: '/pwa-192x192.png', mimeMatch: 'image/png' },
+        { url: '/pwa-512x512.png', mimeMatch: 'image/png' },
+        { url: '/maskable-icon-512x512.png', mimeMatch: 'image/png' },
+      ];
+
+      for (const asset of iconAssets) {
+        const response = await request.get(asset.url);
+        expect(response.status()).toBe(200);
+        const ct = response.headers()['content-type'] || '';
+        expect(ct).toContain(asset.mimeMatch);
+      }
+    });
+  });
 });
+
 

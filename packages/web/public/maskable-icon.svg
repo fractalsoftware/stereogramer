@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Foreground neon cyan radial gradient -->
+    <radialGradient id="cyanGrad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#a5f3fc" />
+      <stop offset="35%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </radialGradient>
+    <!-- Horizontally offset neon purple/magenta radial gradient (binocular disparity) -->
+    <radialGradient id="magentaGrad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fdf4ff" />
+      <stop offset="35%" stop-color="#e879f9" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </radialGradient>
+  </defs>
+  <!-- Dark obsidian/slate background -->
+  <rect width="512" height="512" fill="#090d16" />
+  <g transform="translate(51.2, 51.2) scale(0.8)">
+    <!-- 7x7 Substrate Matrix Dots -->
+    <circle cx="118" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="118" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="164" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="210" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="256" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="302" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="348" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="118" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="164" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="210" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="256" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="302" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="348" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <circle cx="394" cy="394" r="5.5" fill="#1e293b" opacity="0.45" />
+    <!-- Disparity Dot Matrix Letter 'S' with Screen Blend Overlap -->
+    <g style="mix-blend-mode: screen;">
+      <circle cx="220" cy="118" r="17" fill="url(#magentaGrad)" />
+      <circle cx="266" cy="118" r="17" fill="url(#magentaGrad)" />
+      <circle cx="312" cy="118" r="17" fill="url(#magentaGrad)" />
+      <circle cx="174" cy="164" r="17" fill="url(#magentaGrad)" />
+      <circle cx="358" cy="164" r="17" fill="url(#magentaGrad)" />
+      <circle cx="174" cy="210" r="17" fill="url(#magentaGrad)" />
+      <circle cx="220" cy="256" r="17" fill="url(#magentaGrad)" />
+      <circle cx="266" cy="256" r="17" fill="url(#magentaGrad)" />
+      <circle cx="312" cy="256" r="17" fill="url(#magentaGrad)" />
+      <circle cx="358" cy="302" r="17" fill="url(#magentaGrad)" />
+      <circle cx="174" cy="348" r="17" fill="url(#magentaGrad)" />
+      <circle cx="358" cy="348" r="17" fill="url(#magentaGrad)" />
+      <circle cx="220" cy="394" r="17" fill="url(#magentaGrad)" />
+      <circle cx="266" cy="394" r="17" fill="url(#magentaGrad)" />
+      <circle cx="312" cy="394" r="17" fill="url(#magentaGrad)" />
+      <circle cx="207" cy="118" r="17" fill="url(#cyanGrad)" />
+      <circle cx="253" cy="118" r="17" fill="url(#cyanGrad)" />
+      <circle cx="299" cy="118" r="17" fill="url(#cyanGrad)" />
+      <circle cx="161" cy="164" r="17" fill="url(#cyanGrad)" />
+      <circle cx="345" cy="164" r="17" fill="url(#cyanGrad)" />
+      <circle cx="161" cy="210" r="17" fill="url(#cyanGrad)" />
+      <circle cx="207" cy="256" r="17" fill="url(#cyanGrad)" />
+      <circle cx="253" cy="256" r="17" fill="url(#cyanGrad)" />
+      <circle cx="299" cy="256" r="17" fill="url(#cyanGrad)" />
+      <circle cx="345" cy="302" r="17" fill="url(#cyanGrad)" />
+      <circle cx="161" cy="348" r="17" fill="url(#cyanGrad)" />
+      <circle cx="345" cy="348" r="17" fill="url(#cyanGrad)" />
+      <circle cx="207" cy="394" r="17" fill="url(#cyanGrad)" />
+      <circle cx="253" cy="394" r="17" fill="url(#cyanGrad)" />
+      <circle cx="299" cy="394" r="17" fill="url(#cyanGrad)" />
+    </g>
+  </g>
+</svg>
