@@ -31,9 +31,35 @@ import {
   deleteSavedPattern,
   type SavedPatternRecipe,
 } from './pattern/index.js';
+import {
+  InstallAppButton,
+  UpdateToast,
+  useOnlineStatus,
+  useModelCacheStatus,
+  AiOfflineAdvisory,
+} from './pwa/index.js';
 
 type GeneratorMode = 'sirds' | 'textured';
-type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
+export type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
+
+export interface NavigationQuery {
+  action: string | null;
+  tab: string | null;
+  depthSource?: DepthSource;
+  isPatternStudioOpen: boolean;
+}
+
+export function parseNavigationQuery(search: string): NavigationQuery {
+  const params = new URLSearchParams(search);
+  const action = params.get('action');
+  const tab = params.get('tab');
+  return {
+    action,
+    tab,
+    depthSource: tab === 'ai-photo' ? 'ai' : undefined,
+    isPatternStudioOpen: action === 'texture-studio',
+  };
+}
 
 interface AiProgress {
   stage: string;
@@ -76,7 +102,13 @@ function PatternThumbnail({ recipe }: { recipe: PatternRecipe }) {
 export const App: React.FC = () => {
   // Mode & Source state
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('textured');
-  const [depthSource, setDepthSource] = useState<DepthSource>('preset');
+  const [depthSource, setDepthSource] = useState<DepthSource>(() => {
+    if (typeof window !== 'undefined') {
+      const nav = parseNavigationQuery(window.location.search);
+      if (nav.depthSource) return nav.depthSource;
+    }
+    return 'preset';
+  });
   const [selectedDepthPreset, setSelectedDepthPreset] = useState<SampleDepthName>('shark');
   const [primitive, setPrimitive] = useState<DepthPrimitive>('sphere');
   const [extrudedText, setExtrudedText] = useState<string>('3D MAGIC');
@@ -92,8 +124,36 @@ export const App: React.FC = () => {
   const [customPattern, setCustomPattern] = useState<UploadedImage | null>(null);
   const [activePatternRecipe, setActivePatternRecipe] = useState<PatternRecipe | null>(null);
   const [verticalPeriod, setVerticalPeriod] = useState<number>(80);
-  const [isPatternStudioOpen, setIsPatternStudioOpen] = useState<boolean>(false);
+  const [isPatternStudioOpen, setIsPatternStudioOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return parseNavigationQuery(window.location.search).isPatternStudioOpen;
+    }
+    return false;
+  });
   const [savedPatterns, setSavedPatterns] = useState<SavedPatternRecipe[]>(() => getSavedPatterns());
+
+  // Progressive Web App (PWA) Offline & Model Cache State (Ticket #24)
+  const isOnline = useOnlineStatus();
+  const isModelCached = useModelCacheStatus(isOnline, depthSource);
+
+  // Deep-link launcher shortcuts on mount and popstate
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleUrlShortcuts = () => {
+      const nav = parseNavigationQuery(window.location.search);
+      if (nav.isPatternStudioOpen) {
+        setIsPatternStudioOpen(true);
+      }
+      if (nav.depthSource) {
+        setDepthSource(nav.depthSource);
+      }
+    };
+    handleUrlShortcuts();
+    window.addEventListener('popstate', handleUrlShortcuts);
+    return () => {
+      window.removeEventListener('popstate', handleUrlShortcuts);
+    };
+  }, []);
 
   // AI 2D Photo Depth Estimation state
   const [aiPhoto, setAiPhoto] = useState<UploadedImage | null>(null);
@@ -856,12 +916,17 @@ export const App: React.FC = () => {
   return (
     <div className="app-container">
       <header className="header">
-        <div className="logo-title">
-          <div className="logo-badge">3D</div>
-          <h1>Stereogramer Studio</h1>
+        <div className="header-branding">
+          <div className="logo-title">
+            <div className="logo-badge">3D</div>
+            <h1>Stereogramer Studio</h1>
+          </div>
+          <div className="header-subtitle">
+            Interactive SIRDS & Textured SIS Autostereogram Engine
+          </div>
         </div>
-        <div className="header-subtitle">
-          Interactive SIRDS & Textured SIS Autostereogram Engine
+        <div className="header-actions">
+          <InstallAppButton />
         </div>
       </header>
 
@@ -1093,6 +1158,13 @@ export const App: React.FC = () => {
           {/* AI 2D Photo Depth Estimation Controls */}
           {depthSource === 'ai' && (
             <div className="control-group" id="ai-photo-section">
+              {/* Offline Advisory Notice if model weights not cached */}
+              {!isOnline && !isModelCached && !depthEstimatorRef.current && (
+                <AiOfflineAdvisory
+                  onSwitchToPresets={() => setDepthSource('preset')}
+                  onSwitchToShapes={() => setDepthSource('primitive')}
+                />
+              )}
               {aiPhoto ? (
                 <div className="dropzone-loaded" id="ai-photo-card">
                   <div className="dropzone-thumb-wrapper">
@@ -1711,6 +1783,26 @@ export const App: React.FC = () => {
         convergenceMode={convergenceMode}
         depthFactor={depthFactor}
       />
+
+      {/* Studio Footer Status Bar */}
+      <footer className="studio-footer" role="contentinfo">
+        <div className="footer-status-bar">
+          {!isOnline && (
+            <span
+              className="offline-badge"
+              id="offline-badge"
+              role="status"
+              aria-label="Offline"
+            >
+              <span className="offline-dot" aria-hidden="true" />
+              Offline
+            </span>
+          )}
+        </div>
+      </footer>
+
+      {/* Service Worker Update Toast */}
+      <UpdateToast />
     </div>
   );
 };

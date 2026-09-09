@@ -842,5 +842,252 @@ test.describe('Stereogramer Web Studio E2E', () => {
       await expect(dialog).not.toBeVisible();
     });
   });
+
+  test.describe('Brand Identity Icons & Link Tags (Ticket 22)', () => {
+    test('serves brand identity icons with valid headers and DOM head links', async ({ page, request }) => {
+      // Assert presence of icon tags in document head
+      const faviconSvg = page.locator('link[rel="icon"]');
+      await expect(faviconSvg).toHaveAttribute('href', '/favicon.svg');
+      await expect(faviconSvg).toHaveAttribute('type', 'image/svg+xml');
+
+      const faviconIco = page.locator('link[rel="alternate icon"]');
+      await expect(faviconIco).toHaveAttribute('href', '/favicon.ico');
+
+      const appleTouchIcon = page.locator('link[rel="apple-touch-icon"]');
+      await expect(appleTouchIcon).toHaveAttribute('href', '/apple-touch-icon.png');
+
+      // Assert HTTP 200 retrieval for all generated icon assets
+      const iconAssets = [
+        { url: '/favicon.svg', mimeMatch: 'image/svg+xml' },
+        { url: '/favicon.ico', mimeMatch: 'icon' },
+        { url: '/apple-touch-icon.png', mimeMatch: 'image/png' },
+        { url: '/pwa-192x192.png', mimeMatch: 'image/png' },
+        { url: '/pwa-512x512.png', mimeMatch: 'image/png' },
+        { url: '/maskable-icon-512x512.png', mimeMatch: 'image/png' },
+      ];
+
+      for (const asset of iconAssets) {
+        const response = await request.get(asset.url);
+        expect(response.status(), `Expected 200 for ${asset.url}`).toBe(200);
+        const ct = response.headers()['content-type'] || '';
+        expect(ct).toContain(asset.mimeMatch);
+        const body = await response.body();
+        expect(body.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  test.describe('PWA Lifecycle UI, Deep-Linking & Offline Readiness (Ticket #24)', () => {
+    test('serves web app manifest with valid headers, HTTP 200, and DOM head link tag', async ({ page, request }) => {
+      await page.goto('/');
+      // Head link tag
+      const manifestLink = page.locator('link[rel="manifest"]').first();
+      await expect(manifestLink).toHaveAttribute('href', '/manifest.webmanifest');
+
+      // HTTP 200 retrieval
+      const response = await request.get('/manifest.webmanifest');
+      expect(response.status()).toBe(200);
+      const manifest = await response.json();
+      expect(manifest.name).toBe('Stereogramer - 3D Autostereogram Studio');
+      expect(manifest.short_name).toBe('Stereogramer');
+      expect(manifest.display).toBe('standalone');
+      expect(manifest.theme_color).toBe('#0f172a');
+      expect(manifest.background_color).toBe('#090d16');
+      expect(Array.isArray(manifest.icons)).toBe(true);
+      expect(manifest.icons.length).toBeGreaterThanOrEqual(3);
+      expect(Array.isArray(manifest.shortcuts)).toBe(true);
+      expect(manifest.shortcuts.length).toBe(3);
+    });
+
+    test('deep-link shortcut ?action=texture-studio automatically opens PatternStudioModal', async ({ page }) => {
+      await page.goto('/?action=texture-studio');
+      const dialog = page.locator('#pattern-studio-dialog');
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('role', 'dialog');
+      // Can close cleanly
+      const cancelBtn = page.locator('#pattern-studio-cancel-btn');
+      await cancelBtn.click();
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test('deep-link shortcut ?tab=ai-photo automatically selects AI Photo source tab', async ({ page }) => {
+      await page.goto('/?tab=ai-photo');
+      const aiSection = page.locator('#ai-photo-section');
+      await expect(aiSection).toBeVisible();
+      const aiTabBtn = page.locator('button.mode-tab:has-text("AI Photo")');
+      await expect(aiTabBtn).toHaveClass(/active/);
+    });
+
+    test('renders ambient Install App button when beforeinstallprompt fires with proper ARIA attributes', async ({ page }) => {
+      await page.goto('/');
+      const installBtn = page.locator('#pwa-install-btn');
+      // Initially not visible on desktop before beforeinstallprompt
+      await expect(installBtn).not.toBeVisible();
+
+      // Trigger beforeinstallprompt event
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('beforeinstallprompt'));
+      });
+
+      await expect(installBtn).toBeVisible();
+      await expect(installBtn).toHaveAttribute('aria-label', 'Install App');
+    });
+
+    test('renders iOS helper popover on iOS Safari with share instructions and closes on ESC/close button', async ({ page }) => {
+      // Set iPhone user agent
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'userAgent', {
+          get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+        });
+      });
+
+      await page.goto('/');
+      const installBtn = page.locator('#pwa-install-btn');
+      await expect(installBtn).toBeVisible();
+      await expect(installBtn).toHaveAttribute('aria-haspopup', 'dialog');
+
+      // Click install button to open iOS popover
+      await installBtn.click();
+      const tooltip = page.locator('#ios-install-tooltip');
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toHaveAttribute('role', 'dialog');
+      await expect(tooltip).toContainText('Tap the Share button');
+      await expect(tooltip).toContainText('Add to Home Screen');
+
+      // Test close button
+      const closeBtn = tooltip.locator('.btn-close-tooltip');
+      await closeBtn.click();
+      await expect(tooltip).not.toBeVisible();
+
+      // Open again and test ESC key dismiss
+      await installBtn.click();
+      await expect(tooltip).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(tooltip).not.toBeVisible();
+    });
+
+    test('hides Install App button when running in standalone mode', async ({ page }) => {
+      // Simulate standalone mode
+      await page.addInitScript(() => {
+        Object.defineProperty(window, 'matchMedia', {
+          writable: true,
+          value: (query: string) => ({
+            matches: query.includes('display-mode: standalone'),
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => true,
+          }),
+        });
+      });
+
+      await page.goto('/');
+      // Trigger beforeinstallprompt
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('beforeinstallprompt'));
+      });
+
+      const installBtn = page.locator('#pwa-install-btn');
+      await expect(installBtn).not.toBeVisible();
+    });
+
+    test('renders Service Worker Update Available toast with Reload and Dismiss actions', async ({ page }) => {
+      await page.goto('/');
+      const updateToast = page.locator('#pwa-update-toast');
+      await expect(updateToast).not.toBeVisible();
+
+      // Trigger test update available event
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('pwa:test-update-available'));
+      });
+
+      await expect(updateToast).toBeVisible();
+      await expect(updateToast).toHaveAttribute('role', 'alert');
+      await expect(updateToast).toHaveAttribute('aria-live', 'assertive');
+      await expect(updateToast).toContainText('Update Available');
+      await expect(updateToast).toContainText('New version available');
+
+      const reloadBtn = page.locator('#pwa-reload-btn');
+      const dismissBtn = page.locator('#pwa-dismiss-btn');
+      await expect(reloadBtn).toBeVisible();
+      await expect(dismissBtn).toBeVisible();
+
+      // Dismiss hides toast
+      await dismissBtn.click();
+      await expect(updateToast).not.toBeVisible();
+    });
+
+    test('displays subtle Offline badge in footer and advisory in AI Photo tab when offline', async ({ page, context }) => {
+      await page.goto('/?tab=ai-photo');
+      const offlineBadge = page.locator('#offline-badge');
+      await expect(offlineBadge).not.toBeVisible();
+
+      // Simulate offline network
+      await context.setOffline(true);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('offline'));
+      });
+
+      // Assert footer status bar shows offline badge
+      await expect(offlineBadge).toBeVisible();
+      await expect(offlineBadge).toHaveAttribute('role', 'status');
+      await expect(offlineBadge).toContainText('Offline');
+
+      // Assert AI Photo offline advisory banner is rendered
+      const advisory = page.locator('#ai-photo-offline-advisory');
+      await expect(advisory).toBeVisible();
+      await expect(advisory).toHaveAttribute('role', 'alert');
+      await expect(advisory).toContainText('AI Model Not Cached');
+      await expect(advisory).toContainText('Procedural depth maps, shapes, and textures are 100% functional offline');
+
+      // Click "Use Procedural Presets" recovery button
+      const switchPresetsBtn = page.locator('#btn-offline-switch-presets');
+      await switchPresetsBtn.click();
+      await expect(page.locator('#depth-preset-select')).toBeVisible();
+
+      // Return online
+      await context.setOffline(false);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('online'));
+      });
+      await expect(offlineBadge).not.toBeVisible();
+    });
+
+    test('verifies service worker is registered in production preview mode', async ({ page }) => {
+      await page.goto('/');
+
+      // Wait for service worker to register and become active / ready
+      const registrationInfo = await page.evaluate(async () => {
+        if (!('serviceWorker' in navigator)) return null;
+
+        // Race between ready promise and polling getRegistration
+        const reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<ServiceWorkerRegistration | null>((resolve) => {
+            const check = async () => {
+              const r = await navigator.serviceWorker.getRegistration();
+              if (r) resolve(r);
+              else setTimeout(check, 100);
+            };
+            check();
+            setTimeout(() => resolve(null), 10000);
+          }),
+        ]);
+
+        if (!reg) return null;
+        return {
+          scope: reg.scope,
+          hasWorker: !!(reg.active || reg.installing || reg.waiting),
+        };
+      });
+
+      expect(registrationInfo).not.toBeNull();
+      expect(registrationInfo?.hasWorker).toBe(true);
+    });
+  });
 });
+
 
