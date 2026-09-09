@@ -32,10 +32,6 @@ export function usePwaInstall() {
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
 
   useEffect(() => {
-    // Re-check standalone and iOS on mount
-    setIsStandalone(checkIsStandalone());
-    setIsIos(checkIsIos());
-
     // Listen to standalone media query changes
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
     const handleMediaChange = (e: MediaQueryListEvent) => {

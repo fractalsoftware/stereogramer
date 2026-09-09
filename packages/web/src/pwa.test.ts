@@ -69,10 +69,10 @@ describe('PWA Service Worker & Tiered Caching Infrastructure (Ticket #23 / ADR 0
       expect(textureStudio!.url).toBe('/?action=texture-studio');
       expect(textureStudio!.description).toBe('Open procedural pattern and texture generator');
 
-      const aiPhoto = shortcuts!.find((s) => s.name === 'AI 3D Photo');
+      const aiPhoto = shortcuts!.find((s) => s.name === 'AI Photo Depth');
       expect(aiPhoto).toBeDefined();
       expect(aiPhoto!.url).toBe('/?tab=ai-photo');
-      expect(aiPhoto!.description).toBe('Convert photos to 3D autostereograms');
+      expect(aiPhoto!.description).toBe('Convert photos to autostereograms using AI depth estimation');
 
       const newStereogram = shortcuts!.find((s) => s.name === 'New Stereogram');
       expect(newStereogram).toBeDefined();
@@ -111,15 +111,52 @@ describe('PWA Service Worker & Tiered Caching Infrastructure (Ticket #23 / ADR 0
       expect(pwaOptions.strategies).toBe('generateSW');
     });
 
-    it('precaches core app bundles, WASM binaries, and web workers with enlarged file size limit', () => {
+    it('precaches core app bundles and assets excluding heavy WASM binaries for <2MB initial payload (ADR 0004)', () => {
       const globPatterns = workboxConfig.globPatterns;
       expect(globPatterns).toBeDefined();
-      expect(globPatterns).toContain('**/*.{js,css,html,svg,png,ico,wasm}');
+      expect(globPatterns).toEqual(['**/*.{js,css,html,svg,png,ico}']);
+      for (const pattern of globPatterns!) {
+        expect(pattern).not.toContain('wasm');
+      }
 
-      // Must be set to at least 30MB to accommodate ort-wasm binaries (~21.5MB)
+      // maximumFileSizeToCacheInBytes should either be undefined (default 2MB) or <= 2MB
       const maxFileSize = workboxConfig.maximumFileSizeToCacheInBytes;
-      expect(maxFileSize).toBeDefined();
-      expect(maxFileSize).toBeGreaterThanOrEqual(30 * 1024 * 1024);
+      if (maxFileSize !== undefined) {
+        expect(maxFileSize).toBeLessThanOrEqual(2 * 1024 * 1024);
+      }
+    });
+
+    it('configures runtime caching for WASM binaries with CacheFirst strategy and 30-day expiration', () => {
+      const runtimeCaching = workboxConfig.runtimeCaching;
+      expect(runtimeCaching).toBeDefined();
+      expect(Array.isArray(runtimeCaching)).toBe(true);
+
+      const wasmRule = runtimeCaching!.find((rule) => {
+        const pattern = rule.urlPattern;
+        if (pattern instanceof RegExp) {
+          return pattern.test('ort-wasm-simd-threaded.jsep-B0T3yYHD.wasm') || pattern.test('foo.wasm');
+        }
+        return false;
+      });
+
+      expect(wasmRule, 'WASM binaries runtime caching rule must be configured').toBeDefined();
+      expect(wasmRule!.handler).toBe('CacheFirst');
+
+      const options = wasmRule!.options;
+      expect(options).toBeDefined();
+      expect(options!.cacheName).toBe('wasm-binaries');
+
+      expect(options!.expiration).toBeDefined();
+      expect(options!.expiration!.maxEntries).toBe(5);
+      expect(options!.expiration!.maxAgeSeconds).toBe(30 * 24 * 60 * 60); // 30 days
+
+      expect(options!.cacheableResponse).toBeDefined();
+      expect(options!.cacheableResponse!.statuses).toEqual([0, 200]);
+
+      const regex = wasmRule!.urlPattern as RegExp;
+      expect(regex.test('ort-wasm-simd-threaded.jsep.wasm')).toBe(true);
+      expect(regex.test('assets/ort-wasm-simd-threaded.wasm')).toBe(true);
+      expect(regex.test('assets/index.js')).toBe(false);
     });
 
     it('configures runtime caching for Hugging Face CDN model weights with CacheFirst strategy and 30-day expiration', () => {
@@ -204,6 +241,7 @@ describe('PWA Service Worker & Tiered Caching Infrastructure (Ticket #23 / ADR 0
         const swContent = fs.readFileSync(swPath, 'utf-8');
         expect(swContent).toContain('SKIP_WAITING');
         expect(swContent).toContain('huggingface-models');
+        expect(swContent).toContain('wasm-binaries');
         expect(swContent).toContain('CacheFirst');
       }
     });

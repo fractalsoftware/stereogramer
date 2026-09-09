@@ -846,8 +846,9 @@ test.describe('Stereogramer Web Studio E2E', () => {
   test.describe('Brand Identity Icons & Link Tags (Ticket 22)', () => {
     test('serves brand identity icons with valid headers and DOM head links', async ({ page, request }) => {
       // Assert presence of icon tags in document head
-      const faviconSvg = page.locator('link[rel="icon"][type="image/svg+xml"]');
+      const faviconSvg = page.locator('link[rel="icon"]');
       await expect(faviconSvg).toHaveAttribute('href', '/favicon.svg');
+      await expect(faviconSvg).toHaveAttribute('type', 'image/svg+xml');
 
       const faviconIco = page.locator('link[rel="alternate icon"]');
       await expect(faviconIco).toHaveAttribute('href', '/favicon.ico');
@@ -867,9 +868,11 @@ test.describe('Stereogramer Web Studio E2E', () => {
 
       for (const asset of iconAssets) {
         const response = await request.get(asset.url);
-        expect(response.status()).toBe(200);
+        expect(response.status(), `Expected 200 for ${asset.url}`).toBe(200);
         const ct = response.headers()['content-type'] || '';
         expect(ct).toContain(asset.mimeMatch);
+        const body = await response.body();
+        expect(body.length).toBeGreaterThan(0);
       }
     });
   });
@@ -1055,11 +1058,34 @@ test.describe('Stereogramer Web Studio E2E', () => {
 
     test('verifies service worker is registered in production preview mode', async ({ page }) => {
       await page.goto('/');
-      // In production preview, service worker registration can be checked
-      const hasSwSupport = await page.evaluate(async () => {
-        return 'serviceWorker' in navigator;
+
+      // Wait for service worker to register and become active / ready
+      const registrationInfo = await page.evaluate(async () => {
+        if (!('serviceWorker' in navigator)) return null;
+
+        // Race between ready promise and polling getRegistration
+        const reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<ServiceWorkerRegistration | null>((resolve) => {
+            const check = async () => {
+              const r = await navigator.serviceWorker.getRegistration();
+              if (r) resolve(r);
+              else setTimeout(check, 100);
+            };
+            check();
+            setTimeout(() => resolve(null), 10000);
+          }),
+        ]);
+
+        if (!reg) return null;
+        return {
+          scope: reg.scope,
+          hasWorker: !!(reg.active || reg.installing || reg.waiting),
+        };
       });
-      expect(hasSwSupport).toBe(true);
+
+      expect(registrationInfo).not.toBeNull();
+      expect(registrationInfo?.hasWorker).toBe(true);
     });
   });
 });

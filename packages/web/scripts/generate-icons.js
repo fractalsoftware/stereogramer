@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
  * Matrix layout:
  * - 7 rows (0 to 6) and 7 columns (0 to 6)
  * - Foreground neon cyan dots (#06b6d4 / #22d3ee) form the primary letter 'S'
- * - Horizontally offset neon purple/magenta dots (#c084fc / #e879f9) simulate binocular disparity / stereoscopic parallax
+ * - Horizontally offset neon purple/magenta dots (#c084fc / #e879f9) simulate binocular disparity / ocular disparity
  * - Dark obsidian/slate background (#090d16)
  * - Ambient substrate dots (#1e293b, opacity ~0.45)
  */

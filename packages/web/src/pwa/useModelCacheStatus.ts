@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { DepthSource } from '../App.js';
 
 /**
  * Checks whether neural network model weights (ONNX / HuggingFace) exist in CacheStorage.
@@ -27,7 +28,7 @@ export async function checkIsModelCached(): Promise<boolean> {
   return false;
 }
 
-export function useModelCacheStatus(isOnline: boolean, activeTab: string): boolean {
+export function useModelCacheStatus(isOnline: boolean, activeTab: DepthSource): boolean {
   const [isModelCached, setIsModelCached] = useState<boolean>(false);
 
   useEffect(() => {

@@ -10,13 +10,13 @@ export const InstallAppButton: React.FC<InstallAppButtonProps> = ({
   forceShow = false,
   forceIos = false,
 }) => {
-  const { isStandalone, isIos: detectedIos, canInstall: detectedCanInstall, promptInstall, deferredPrompt } = usePwaInstall();
+  const { isIos: detectedIos, canInstall: hookCanInstall, promptInstall, deferredPrompt } = usePwaInstall();
   const [isIosTooltipOpen, setIsIosTooltipOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const isIos = forceIos || detectedIos;
-  const canInstall = forceShow || (!isStandalone && (isIos || detectedCanInstall || deferredPrompt !== null));
+  const canInstall = forceShow || hookCanInstall;
 
   // Dismiss iOS tooltip on outside click or ESC key
   useEffect(() => {
@@ -53,9 +53,6 @@ export const InstallAppButton: React.FC<InstallAppButtonProps> = ({
       setIsIosTooltipOpen((open) => !open);
     } else if (deferredPrompt) {
       await promptInstall();
-    } else {
-      // Fallback if triggered without deferred prompt
-      setIsIosTooltipOpen((open) => !open);
     }
   };
 

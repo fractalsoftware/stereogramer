@@ -40,7 +40,26 @@ import {
 } from './pwa/index.js';
 
 type GeneratorMode = 'sirds' | 'textured';
-type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
+export type DepthSource = 'preset' | 'primitive' | 'text' | 'upload' | 'ai';
+
+export interface NavigationQuery {
+  action: string | null;
+  tab: string | null;
+  depthSource?: DepthSource;
+  isPatternStudioOpen: boolean;
+}
+
+export function parseNavigationQuery(search: string): NavigationQuery {
+  const params = new URLSearchParams(search);
+  const action = params.get('action');
+  const tab = params.get('tab');
+  return {
+    action,
+    tab,
+    depthSource: tab === 'ai-photo' ? 'ai' : undefined,
+    isPatternStudioOpen: action === 'texture-studio',
+  };
+}
 
 interface AiProgress {
   stage: string;
@@ -85,8 +104,8 @@ export const App: React.FC = () => {
   const [generatorMode, setGeneratorMode] = useState<GeneratorMode>('textured');
   const [depthSource, setDepthSource] = useState<DepthSource>(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('tab') === 'ai-photo') return 'ai';
+      const nav = parseNavigationQuery(window.location.search);
+      if (nav.depthSource) return nav.depthSource;
     }
     return 'preset';
   });
@@ -107,8 +126,7 @@ export const App: React.FC = () => {
   const [verticalPeriod, setVerticalPeriod] = useState<number>(80);
   const [isPatternStudioOpen, setIsPatternStudioOpen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('action') === 'texture-studio') return true;
+      return parseNavigationQuery(window.location.search).isPatternStudioOpen;
     }
     return false;
   });
@@ -122,12 +140,12 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleUrlShortcuts = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('action') === 'texture-studio') {
+      const nav = parseNavigationQuery(window.location.search);
+      if (nav.isPatternStudioOpen) {
         setIsPatternStudioOpen(true);
       }
-      if (params.get('tab') === 'ai-photo') {
-        setDepthSource('ai');
+      if (nav.depthSource) {
+        setDepthSource(nav.depthSource);
       }
     };
     handleUrlShortcuts();
@@ -1769,9 +1787,6 @@ export const App: React.FC = () => {
       {/* Studio Footer Status Bar */}
       <footer className="studio-footer" role="contentinfo">
         <div className="footer-status-bar">
-          <span className="generator-status" id="generator-status">
-            {isEstimating ? 'Estimating depth...' : 'Stereogram Studio Ready'}
-          </span>
           {!isOnline && (
             <span
               className="offline-badge"

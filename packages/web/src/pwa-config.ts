@@ -34,9 +34,9 @@ export const manifestConfig: Partial<ManifestOptions> = {
       description: 'Open procedural pattern and texture generator',
     },
     {
-      name: 'AI 3D Photo',
+      name: 'AI Photo Depth',
       url: '/?tab=ai-photo',
-      description: 'Convert photos to 3D autostereograms',
+      description: 'Convert photos to autostereograms using AI depth estimation',
     },
     {
       name: 'New Stereogram',
@@ -47,9 +47,22 @@ export const manifestConfig: Partial<ManifestOptions> = {
 };
 
 export const workboxConfig: NonNullable<VitePWAOptions['workbox']> = {
-  globPatterns: ['**/*.{js,css,html,svg,png,ico,wasm}'],
-  maximumFileSizeToCacheInBytes: 30 * 1024 * 1024, // 30 MB to comfortably precache ort-wasm binaries (~21MB)
+  globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
   runtimeCaching: [
+    {
+      urlPattern: /.*\.wasm$/i,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'wasm-binaries',
+        expiration: {
+          maxEntries: 5,
+          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+        },
+        cacheableResponse: {
+          statuses: [0, 200],
+        },
+      },
+    },
     {
       urlPattern: /^https:\/\/(?:[a-zA-Z0-9-]+\.)?huggingface\.co\/.*(onnx|bin|json)/i,
       handler: 'CacheFirst',
