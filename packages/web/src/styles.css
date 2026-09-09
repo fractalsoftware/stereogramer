@@ -1682,5 +1682,274 @@ input[type="range"] {
   background-color: rgba(239, 68, 68, 0.15);
 }
 
+/* ==========================================================================
+   Progressive Web App (PWA) Lifecycle UI (Ticket #24)
+   ========================================================================== */
+
+.header-branding {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.install-app-container {
+  position: relative;
+}
+
+.btn-install-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  background-color: rgba(56, 189, 248, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 6px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-install-app:hover {
+  background-color: rgba(56, 189, 248, 0.22);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.btn-install-app:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.install-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.install-label {
+  line-height: 1;
+}
+
+/* iOS Safari 1-Step Helper Tooltip */
+.ios-install-tooltip {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  width: 290px;
+  background-color: #1e293b;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  padding: 0.85rem;
+  z-index: 1000;
+  color: var(--text-main);
+}
+
+.ios-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.ios-tooltip-title {
+  font-size: 0.85rem;
+  color: var(--primary);
+}
+
+.btn-close-tooltip {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.btn-close-tooltip:hover {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn-close-tooltip:focus-visible {
+  outline: 2px solid var(--primary);
+}
+
+.ios-instruction-text {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.ios-symbol {
+  display: inline-block;
+  padding: 0 2px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* PWA Update Toast Notification */
+.pwa-update-toast {
+  position: fixed;
+  bottom: 2.25rem;
+  right: 1.5rem;
+  background-color: #1e293b;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.65), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  z-index: 1100;
+  max-width: 340px;
+}
+
+.pwa-toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.pwa-toast-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.pwa-toast-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pwa-toast-title {
+  font-size: 0.875rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.pwa-toast-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.pwa-toast-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Studio Footer Status Bar */
+.studio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 1.25rem;
+  background-color: #0f172a;
+  border-top: 1px solid var(--surface-border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.footer-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.generator-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.offline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ef4444;
+}
+
+/* AI Photo Offline Advisory Banner */
+.ai-offline-advisory {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.ai-offline-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-offline-icon {
+  font-size: 1rem;
+}
+
+.ai-offline-title {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.ai-offline-desc {
+  font-size: 0.775rem;
+  color: #d1d5db;
+  line-height: 1.4;
+}
+
+.ai-offline-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.ai-offline-actions .btn-sm {
+  font-size: 0.75rem;
+}
+
+
 
 

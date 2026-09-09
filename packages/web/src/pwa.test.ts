@@ -208,4 +208,34 @@ describe('PWA Service Worker & Tiered Caching Infrastructure (Ticket #23 / ADR 0
       }
     });
   });
+
+  describe('PWA Lifecycle Utilities (Ticket #24)', () => {
+    it('provides checkIsStandalone detecting window display-mode and navigator.standalone', async () => {
+      const { checkIsStandalone } = await import('./pwa/usePwaInstall.js');
+
+      // In Node environment without window, should return false safely
+      expect(checkIsStandalone()).toBe(false);
+    });
+
+    it('provides checkIsIos detecting iPad/iPhone/iPod user agents', async () => {
+      const { checkIsIos } = await import('./pwa/usePwaInstall.js');
+
+      // In Node environment without navigator, should return false safely
+      expect(checkIsIos()).toBe(false);
+    });
+
+    it('declares exact required deep-link URLs in shortcuts configuration', () => {
+      const shortcuts = manifestConfig.shortcuts || [];
+      const urls = shortcuts.map((s) => s.url);
+      expect(urls).toContain('/?action=texture-studio');
+      expect(urls).toContain('/?tab=ai-photo');
+      expect(urls).toContain('/');
+    });
+
+    it('provides checkIsModelCached returning false safely in non-browser environment', async () => {
+      const { checkIsModelCached } = await import('./pwa/useModelCacheStatus.js');
+      const result = await checkIsModelCached();
+      expect(result).toBe(false);
+    });
+  });
 });
